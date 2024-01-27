@@ -41,7 +41,10 @@ class video_encoder_vulkan_h264 : public video_encoder_vulkan
 	std::vector<StdVideoEncodeH264ReferenceInfo> dpb_std_info;
 	std::vector<vk::VideoEncodeH264DpbSlotInfoKHR> dpb_std_slots;
 
-	video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps);
+	vk::VideoEncodeH264GopRemainingFrameInfoKHR gop_info;
+	vk::VideoEncodeH264RateControlInfoKHR rate_control_h264;
+
+	video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps, float fps, uint64_t bitrate);
 
 protected:
 	std::vector<void *> setup_slot_info(size_t dpb_size) override;

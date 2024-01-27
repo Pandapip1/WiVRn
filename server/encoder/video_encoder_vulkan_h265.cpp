@@ -20,8 +20,8 @@
 #include "util/u_logging.h"
 #include "utils/wivrn_vk_bundle.h"
 
-video_encoder_vulkan_h265::video_encoder_vulkan_h265(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps) :
-        video_encoder_vulkan(vk, rect, encode_caps),
+video_encoder_vulkan_h265::video_encoder_vulkan_h265(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps, float fps, uint64_t bitrate) :
+        video_encoder_vulkan(vk, rect, encode_caps, fps, bitrate),
         vps{
                 .flags{
                         .vps_temporal_id_nesting_flag = 0,
@@ -233,13 +233,7 @@ std::unique_ptr<video_encoder_vulkan_h265> video_encoder_vulkan_h265::create(
 	                vk::VideoEncodeCapabilitiesKHR,
 	                vk::VideoEncodeH265CapabilitiesKHR>(video_profile_info.get());
 
-	if (encode_caps.rateControlModes & (vk::VideoEncodeRateControlModeFlagBitsKHR::eCbr | vk::VideoEncodeRateControlModeFlagBitsKHR::eVbr) and encode_caps.maxBitrate == 0)
-	{
-		U_LOG_W("Invalid encode capabilities");
-		encode_caps.rateControlModes = vk::VideoEncodeRateControlModeFlagBitsKHR::eDefault;
-	}
-
-	std::unique_ptr<video_encoder_vulkan_h265> self(new video_encoder_vulkan_h265(vk, rect, encode_caps));
+	std::unique_ptr<video_encoder_vulkan_h265> self(new video_encoder_vulkan_h265(vk, rect, encode_caps, fps, settings.bitrate));
 
 	vk::VideoEncodeH265SessionParametersAddInfoKHR h265_add_info{};
 	h265_add_info.setStdVPSs(self->vps);
@@ -256,6 +250,22 @@ std::unique_ptr<video_encoder_vulkan_h265> video_encoder_vulkan_h265::create(
 	vk::VideoEncodeH265SessionCreateInfoKHR session_create_info{
 	        .useMaxLevelIdc = false,
 	};
+
+	if (encode_h265_caps.requiresGopRemainingFrames)
+	{
+		self->gop_info = vk::VideoEncodeH265GopRemainingFrameInfoKHR{
+		        .useGopRemainingFrames = true,
+		        .gopRemainingI = 0,
+		        .gopRemainingP = std::numeric_limits<uint32_t>::max(),
+		        .gopRemainingB = 0,
+		};
+		self->rate_control_h265 = vk::VideoEncodeH265RateControlInfoKHR{
+		        .pNext = &self->gop_info,
+		        .gopFrameCount = std::numeric_limits<uint32_t>::max(),
+		        .idrPeriod = std::numeric_limits<uint32_t>::max(),
+		};
+		self->rate_control->pNext = &self->rate_control_h265;
+	}
 
 	self->init(video_caps, video_profile_info.get(), &session_create_info, &h265_session_params);
 

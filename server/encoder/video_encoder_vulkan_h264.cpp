@@ -18,8 +18,8 @@
 #include "video_encoder_vulkan_h264.h"
 #include "utils/wivrn_vk_bundle.h"
 
-video_encoder_vulkan_h264::video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps) :
-        video_encoder_vulkan(vk, rect, encode_caps),
+video_encoder_vulkan_h264::video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps, float fps, uint64_t bitrate) :
+        video_encoder_vulkan(vk, rect, encode_caps, fps, bitrate),
         sps{
                 .flags =
                         {
@@ -40,7 +40,7 @@ video_encoder_vulkan_h264::video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::R
                                 .seq_scaling_matrix_present_flag = 0,
                                 .vui_parameters_present_flag = 0,
                         },
-                .profile_idc = STD_VIDEO_H264_PROFILE_IDC_MAIN,
+                .profile_idc = STD_VIDEO_H264_PROFILE_IDC_HIGH,
                 .level_idc = STD_VIDEO_H264_LEVEL_IDC_5_1,
                 .chroma_format_idc = STD_VIDEO_H264_CHROMA_FORMAT_IDC_420,
                 .seq_parameter_set_id = 0,
@@ -150,7 +150,7 @@ std::unique_ptr<video_encoder_vulkan_h264> video_encoder_vulkan_h264::create(
 	                vk::VideoEncodeCapabilitiesKHR,
 	                vk::VideoEncodeH264CapabilitiesKHR>(video_profile_info.get());
 
-	std::unique_ptr<video_encoder_vulkan_h264> self(new video_encoder_vulkan_h264(vk, rect, encode_caps));
+	std::unique_ptr<video_encoder_vulkan_h264> self(new video_encoder_vulkan_h264(vk, rect, encode_caps, fps, settings.bitrate));
 
 	vk::VideoEncodeH264SessionParametersAddInfoKHR h264_add_info{};
 	h264_add_info.setStdSPSs(self->sps);
@@ -165,6 +165,22 @@ std::unique_ptr<video_encoder_vulkan_h264> video_encoder_vulkan_h264::create(
 	vk::VideoEncodeH264SessionCreateInfoKHR session_create_info{
 	        .useMaxLevelIdc = false,
 	};
+
+	if (encode_h264_caps.requiresGopRemainingFrames)
+	{
+		self->gop_info = vk::VideoEncodeH264GopRemainingFrameInfoKHR{
+		        .useGopRemainingFrames = true,
+		        .gopRemainingI = 0,
+		        .gopRemainingP = std::numeric_limits<uint32_t>::max(),
+		        .gopRemainingB = 0,
+		};
+		self->rate_control_h264 = vk::VideoEncodeH264RateControlInfoKHR{
+		        .pNext = &self->gop_info,
+		        .gopFrameCount = std::numeric_limits<uint32_t>::max(),
+		        .idrPeriod = std::numeric_limits<uint32_t>::max(),
+		};
+		self->rate_control->pNext = &self->rate_control_h264;
+	}
 
 	self->init(video_caps, video_profile_info.get(), &session_create_info, &h264_session_params);
 

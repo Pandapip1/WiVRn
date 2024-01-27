@@ -82,12 +82,15 @@ class video_encoder_vulkan : public xrt::drivers::wivrn::VideoEncoder
 	uint32_t frame_num = 0;
 	bool session_initialized = false;
 	const vk::Rect2D rect;
+	const float fps;
+
+	vk::VideoEncodeRateControlLayerInfoKHR rate_control_layer;
 
 protected:
 	const uint32_t num_dpb_slots = 2;
+	std::optional<vk::VideoEncodeRateControlInfoKHR> rate_control;
 
-	video_encoder_vulkan(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps) :
-	        vk(vk), rect(rect), encode_caps(encode_caps) {}
+	video_encoder_vulkan(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps, float fps, uint64_t bitrate);
 
 	void init(const vk::VideoCapabilitiesKHR & video_caps,
 	          const vk::VideoProfileInfoKHR & video_profile,

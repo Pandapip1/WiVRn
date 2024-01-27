@@ -42,7 +42,10 @@ class video_encoder_vulkan_h265 : public video_encoder_vulkan
 	std::vector<StdVideoEncodeH265ReferenceInfo> dpb_std_info;
 	std::vector<vk::VideoEncodeH265DpbSlotInfoKHR> dpb_std_slots;
 
-	video_encoder_vulkan_h265(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps);
+	vk::VideoEncodeH265GopRemainingFrameInfoKHR gop_info;
+	vk::VideoEncodeH265RateControlInfoKHR rate_control_h265;
+
+	video_encoder_vulkan_h265(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps, float fps, uint64_t bitrate);
 
 protected:
 	std::vector<void *> setup_slot_info(size_t dpb_size) override;

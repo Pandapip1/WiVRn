@@ -18,6 +18,7 @@
 #include "video_encoder_vulkan.h"
 
 #include "encoder/yuv_converter.h"
+#include "util/u_logging.h"
 #include "utils/wivrn_vk_bundle.h"
 #include <iostream>
 #include <stdexcept>
@@ -27,6 +28,16 @@ static uint32_t align(uint32_t value, uint32_t alignment)
 	if (alignment == 0)
 		return value;
 	return alignment * (1 + (value - 1) / alignment);
+}
+
+static vk::VideoEncodeCapabilitiesKHR patch_capabilities(vk::VideoEncodeCapabilitiesKHR caps)
+{
+	if (caps.rateControlModes & (vk::VideoEncodeRateControlModeFlagBitsKHR::eCbr | vk::VideoEncodeRateControlModeFlagBitsKHR::eVbr) and caps.maxBitrate == 0)
+	{
+		U_LOG_W("Invalid encode capabilities, disabling rate control");
+		caps.rateControlModes = vk::VideoEncodeRateControlModeFlagBitsKHR::eDefault;
+	}
+	return caps;
 }
 
 size_t slot_info::get_slot()
@@ -57,6 +68,52 @@ vk::VideoFormatPropertiesKHR video_encoder_vulkan::select_video_format(
 		return video_fmt_prop;
 	}
 	throw std::runtime_error("No suitable image format found");
+}
+
+video_encoder_vulkan::video_encoder_vulkan(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR in_encode_caps, float fps, uint64_t bitrate) :
+        vk(vk), rect(rect), encode_caps(patch_capabilities(in_encode_caps)), fps(fps)
+{
+	// Initialize Rate control
+	U_LOG_D("Supported rate control modes: %s", vk::to_string(encode_caps.rateControlModes).c_str());
+
+	if (encode_caps.rateControlModes & (vk::VideoEncodeRateControlModeFlagBitsKHR::eCbr | vk::VideoEncodeRateControlModeFlagBitsKHR::eVbr))
+	{
+		U_LOG_D("Maximum bitrate: %ld", encode_caps.maxBitrate / 1'000'000);
+		if (encode_caps.maxBitrate < bitrate)
+		{
+			U_LOG_W("Configured bitrate %ldMB/s is higher than max supported %ld",
+			        bitrate / 1'000'000,
+			        encode_caps.maxBitrate / 1'000'000);
+		}
+	}
+
+	rate_control_layer = vk::VideoEncodeRateControlLayerInfoKHR{
+	        .averageBitrate = std::min(bitrate, encode_caps.maxBitrate),
+	        .maxBitrate = std::min(2 * bitrate, encode_caps.maxBitrate),
+	        .frameRateNumerator = uint32_t(fps * 1'000'000),
+	        .frameRateDenominator = 1'000'000,
+	};
+	rate_control = vk::VideoEncodeRateControlInfoKHR{
+	        .layerCount = 1,
+	        .pLayers = &rate_control_layer,
+	        .virtualBufferSizeInMs = 5'000,
+	        .initialVirtualBufferSizeInMs = 4'000,
+	};
+
+	if (encode_caps.rateControlModes & vk::VideoEncodeRateControlModeFlagBitsKHR::eCbr)
+	{
+		rate_control_layer.maxBitrate = rate_control_layer.averageBitrate;
+		rate_control->rateControlMode = vk::VideoEncodeRateControlModeFlagBitsKHR::eCbr;
+	}
+	else if (encode_caps.rateControlModes & vk::VideoEncodeRateControlModeFlagBitsKHR::eVbr)
+	{
+		rate_control->rateControlMode = vk::VideoEncodeRateControlModeFlagBitsKHR::eVbr;
+	}
+	else
+	{
+		U_LOG_W("No suitable rate control available, reverting to default");
+		rate_control.reset();
+	}
 }
 
 void video_encoder_vulkan::init(const vk::VideoCapabilitiesKHR & video_caps,
@@ -349,7 +406,7 @@ void video_encoder_vulkan::Encode(bool idr, std::chrono::steady_clock::time_poin
 		ref_slot.reset();
 		dpb_status.clear();
 		frame_num = 0;
-		for (auto& slot: dpb_slots)
+		for (auto & slot: dpb_slots)
 		{
 			slot.slotIndex = -1;
 			slot.pPictureResource = nullptr;
@@ -362,6 +419,7 @@ void video_encoder_vulkan::Encode(bool idr, std::chrono::steady_clock::time_poin
 
 	{
 		vk::VideoBeginCodingInfoKHR video_coding_begin_info{
+		        .pNext = (session_initialized and rate_control) ? &rate_control.value() : nullptr,
 		        .videoSession = *video_session,
 		        .videoSessionParameters = *video_session_parameters,
 		};
@@ -371,9 +429,15 @@ void video_encoder_vulkan::Encode(bool idr, std::chrono::steady_clock::time_poin
 
 	if (not session_initialized)
 	{
+		// Initialize encoding session and rate control
 		vk::VideoCodingControlInfoKHR control_info{
 		        .flags = vk::VideoCodingControlFlagBitsKHR::eReset,
 		};
+		if (rate_control)
+		{
+			control_info.flags |= vk::VideoCodingControlFlagBitsKHR::eEncodeRateControl;
+			control_info.pNext = &rate_control.value();
+		}
 		command_buffer.controlVideoCodingKHR(control_info);
 
 		// Set decoded picture buffer to correct layout
