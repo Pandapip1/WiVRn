@@ -280,7 +280,7 @@ vk::ExtensionProperties video_encoder_vulkan_h264::std_header_version()
 {
 	// FIXME: update to version 1.0
 	vk::ExtensionProperties std_header_version{
-	        .specVersion = 0x0000900b, // VK_MAKE_VIDEO_STD_VERSION(1, 0, 0),
+	        .specVersion = VK_MAKE_VIDEO_STD_VERSION(1, 0, 0),
 	};
 	strcpy(std_header_version.extensionName,
 	       VK_STD_VULKAN_VIDEO_CODEC_H264_ENCODE_EXTENSION_NAME);
