@@ -460,9 +460,10 @@ static void * comp_wivrn_present_thread(void * void_param)
 				encoder->Encode(*cn->cnx, psc_image.view_info, psc_image.frame_index);
 			}
 		}
-		catch (...)
+		catch (std::exception & e)
 		{
 			// Ignore errors
+			U_LOG_W("Encode failed: %s", e.what());
 		}
 
 		std::lock_guard lock(cn->psc.mutex);
