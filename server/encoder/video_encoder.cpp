@@ -46,6 +46,7 @@ namespace xrt::drivers::wivrn
 
 std::unique_ptr<VideoEncoder> VideoEncoder::Create(
         wivrn_vk_bundle & wivrn_vk,
+        size_t num_swapchain_images,
         encoder_settings & settings,
         uint8_t stream_idx,
         int input_width,
@@ -60,10 +61,10 @@ std::unique_ptr<VideoEncoder> VideoEncoder::Create(
 		switch (settings.codec)
 		{
 			case video_codec::h264:
-				res = video_encoder_vulkan_h264::create(wivrn_vk, settings, fps);
+				res = video_encoder_vulkan_h264::create(wivrn_vk, num_swapchain_images, settings, fps);
 				break;
 			case video_codec::h265:
-				res = video_encoder_vulkan_h265::create(wivrn_vk, settings, fps);
+				res = video_encoder_vulkan_h265::create(wivrn_vk, num_swapchain_images, settings, fps);
 				break;
 		}
 	}
@@ -115,6 +116,7 @@ void VideoEncoder::SyncNeeded()
 }
 
 void VideoEncoder::Encode(wivrn_session & cnx,
+                          size_t swapchain_index,
                           const to_headset::video_stream_data_shard::view_info_t & view_info,
                           uint64_t frame_index)
 {
@@ -133,7 +135,7 @@ void VideoEncoder::Encode(wivrn_session & cnx,
 	shard.view_info = view_info;
 	shard.timing_info.reset();
 
-	Encode(idr, target_timestamp);
+	Encode(swapchain_index, idr, target_timestamp);
 	cnx.dump_time("encode_end", frame_index, os_monotonic_get_ns(), stream_idx, extra);
 }
 

@@ -118,6 +118,7 @@ video_encoder_vulkan::video_encoder_vulkan(wivrn_vk_bundle & vk, vk::Rect2D rect
 
 void video_encoder_vulkan::init(const vk::VideoCapabilitiesKHR & video_caps,
                                 const vk::VideoProfileInfoKHR & video_profile,
+                                size_t num_input_images,
                                 void * video_session_create_next,
                                 void * session_params_next)
 {
@@ -152,7 +153,6 @@ void video_encoder_vulkan::init(const vk::VideoCapabilitiesKHR & video_caps,
 		};
 
 		// TODO: check format capabilities
-		//
 		vk::ImageCreateInfo img_create_info{
 		        .pNext = &video_profile_list,
 		        .flags = picture_format.imageCreateFlags,
@@ -168,12 +168,15 @@ void video_encoder_vulkan::init(const vk::VideoCapabilitiesKHR & video_caps,
 		        .sharingMode = vk::SharingMode::eExclusive,
 		};
 
-		input_image = image_allocation(
-		        vk.device,
-		        img_create_info,
-		        {
-		                .usage = VMA_MEMORY_USAGE_AUTO,
-		        });
+		for (size_t i = 0; i < num_input_images; ++i)
+		{
+			input_images.emplace_back(image_allocation(
+			        vk.device,
+			        img_create_info,
+			        {
+			                .usage = VMA_MEMORY_USAGE_AUTO,
+			        }));
+		}
 	}
 
 	// Decode picture buffer (DPB) images
@@ -274,9 +277,10 @@ void video_encoder_vulkan::init(const vk::VideoCapabilitiesKHR & video_caps,
 	}
 
 	// input image view
+	for (size_t i = 0; i < num_input_images; ++i)
 	{
 		vk::ImageViewCreateInfo img_view_create_info{
-		        .image = input_image,
+		        .image = input_images[i],
 		        .viewType = vk::ImageViewType::e2D,
 		        .format = picture_format.format,
 		        .components = picture_format.componentMapping,
@@ -286,7 +290,7 @@ void video_encoder_vulkan::init(const vk::VideoCapabilitiesKHR & video_caps,
 		                             .baseArrayLayer = 0,
 		                             .layerCount = 1},
 		};
-		input_image_view = vk.device.createImageView(img_view_create_info);
+		input_image_views.push_back(vk.device.createImageView(img_view_create_info));
 	}
 
 	// DPB image views
@@ -388,7 +392,7 @@ std::vector<uint8_t> video_encoder_vulkan::get_encoded_parameters(void * next)
 	return encoded;
 }
 
-void video_encoder_vulkan::Encode(bool idr, std::chrono::steady_clock::time_point target_timestamp)
+void video_encoder_vulkan::Encode(size_t index, bool idr, std::chrono::steady_clock::time_point target_timestamp)
 {
 	command_buffer.reset();
 	command_buffer.begin(vk::CommandBufferBeginInfo{
@@ -470,7 +474,7 @@ void video_encoder_vulkan::Encode(bool idr, std::chrono::steady_clock::time_poin
 	        .dstBufferRange = output_buffer_size,
 	        .srcPictureResource = {.codedExtent = rect.extent,
 	                               .baseArrayLayer = 0,
-	                               .imageViewBinding = *input_image_view},
+	                               .imageViewBinding = *input_image_views[index]},
 	        .pSetupReferenceSlot = &dpb_slots[slot],
 	};
 	if (ref_slot)
@@ -511,7 +515,7 @@ void video_encoder_vulkan::Encode(bool idr, std::chrono::steady_clock::time_poin
 	SendData({((uint8_t *)output_buffer.map()) + feedback[0], feedback[1]}, true);
 }
 
-void video_encoder_vulkan::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
+void video_encoder_vulkan::PresentImage(size_t index, yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
 {
 	vk::ImageMemoryBarrier2 barrier{
 	        .srcStageMask = vk::PipelineStageFlagBits2KHR::eNone,
@@ -520,7 +524,7 @@ void video_encoder_vulkan::PresentImage(yuv_converter & src_yuv, vk::raii::Comma
 	        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
 	        .oldLayout = vk::ImageLayout::eUndefined,
 	        .newLayout = vk::ImageLayout::eTransferDstOptimal,
-	        .image = input_image,
+	        .image = input_images[index],
 	        .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
 	                             .baseMipLevel = 0,
 	                             .levelCount = 1,
@@ -536,7 +540,7 @@ void video_encoder_vulkan::PresentImage(yuv_converter & src_yuv, vk::raii::Comma
 	cmd_buf.copyImage(
 	        src_yuv.luma,
 	        vk::ImageLayout::eTransferSrcOptimal,
-	        input_image,
+	        input_images[index],
 	        vk::ImageLayout::eTransferDstOptimal,
 	        vk::ImageCopy{
 	                .srcSubresource = {
@@ -560,7 +564,7 @@ void video_encoder_vulkan::PresentImage(yuv_converter & src_yuv, vk::raii::Comma
 	cmd_buf.copyImage(
 	        src_yuv.chroma,
 	        vk::ImageLayout::eTransferSrcOptimal,
-	        input_image,
+	        input_images[index],
 	        vk::ImageLayout::eTransferDstOptimal,
 	        vk::ImageCopy{.srcSubresource = {
 	                              .aspectMask = vk::ImageAspectFlagBits::eColor,

@@ -63,7 +63,7 @@ bool set_log_level()
 
 bool VideoEncoderFFMPEG::once = set_log_level();
 
-void VideoEncoderFFMPEG::Encode(bool idr, std::chrono::steady_clock::time_point target_timestamp)
+void VideoEncoderFFMPEG::Encode(size_t index, bool idr, std::chrono::steady_clock::time_point target_timestamp)
 {
 	PushFrame(idr, target_timestamp);
 	av_packet_ptr enc_pkt(av_packet_alloc());

@@ -136,7 +136,7 @@ static void create_encoders(wivrn_comp_target * cn, std::vector<encoder_settings
 	{
 		uint8_t stream_index = cn->encoders.size();
 		auto & encoder = cn->encoders.emplace_back(
-		        VideoEncoder::Create(*cn->wivrn_bundle, settings, stream_index, desc.width, desc.height, desc.fps));
+		        VideoEncoder::Create(*cn->wivrn_bundle, cn->image_count, settings, stream_index, desc.width, desc.height, desc.fps));
 		desc.items.push_back(settings);
 
 		thread_params[settings.group].encoders.emplace_back(encoder);
@@ -457,7 +457,7 @@ static void * comp_wivrn_present_thread(void * void_param)
 		{
 			for (auto & encoder: param->encoders)
 			{
-				encoder->Encode(*cn->cnx, psc_image.view_info, psc_image.frame_index);
+				encoder->Encode(*cn->cnx, presenting_index, psc_image.view_info, psc_image.frame_index);
 			}
 		}
 		catch (std::exception & e)
@@ -521,7 +521,7 @@ static VkResult comp_wivrn_present(struct comp_target * ct,
 	yuv.record_draw_commands(command_buffer);
 	for (auto & encoder: cn->encoders)
 	{
-		encoder->PresentImage(yuv, command_buffer);
+		encoder->PresentImage(index, yuv, command_buffer);
 	}
 	command_buffer.end();
 

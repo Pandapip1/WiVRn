@@ -41,8 +41,9 @@ class video_encoder_va : public VideoEncoderFFMPEG
 
 public:
 	video_encoder_va(wivrn_vk_bundle &, xrt::drivers::wivrn::encoder_settings & settings, float fps);
+	~video_encoder_va();
 
-	void PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf) override;
+	void PresentImage(size_t index, yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf) override;
 
 protected:
 	void PushFrame(bool idr, std::chrono::steady_clock::time_point pts) override;

@@ -345,7 +345,9 @@ video_encoder_va::video_encoder_va(wivrn_vk_bundle & vk, xrt::drivers::wivrn::en
 	}
 }
 
-void video_encoder_va::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
+video_encoder_va::~video_encoder_va() {}
+
+void video_encoder_va::PresentImage(size_t index, yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
 {
 	std::array im_barriers = {
 	        vk::ImageMemoryBarrier{

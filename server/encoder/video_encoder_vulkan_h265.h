@@ -57,6 +57,7 @@ protected:
 
 public:
 	static std::unique_ptr<video_encoder_vulkan_h265> create(wivrn_vk_bundle & vk,
+	                                                         size_t num_swapchain_images,
 	                                                         xrt::drivers::wivrn::encoder_settings & settings,
 	                                                         float fps);
 

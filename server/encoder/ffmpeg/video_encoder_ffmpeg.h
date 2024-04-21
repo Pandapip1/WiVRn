@@ -28,12 +28,10 @@ class VideoEncoderFFMPEG : public xrt::drivers::wivrn::VideoEncoder
 public:
 	using Codec = xrt::drivers::wivrn::video_codec;
 
-	void
-	Encode(bool idr, std::chrono::steady_clock::time_point target_timestamp) override;
+	void Encode(size_t index, bool idr, std::chrono::steady_clock::time_point target_timestamp) override;
 
 protected:
-	virtual void
-	PushFrame(bool idr, std::chrono::steady_clock::time_point pts) = 0;
+	virtual void PushFrame(bool idr, std::chrono::steady_clock::time_point pts) = 0;
 
 	av_codec_context_ptr encoder_ctx;
 

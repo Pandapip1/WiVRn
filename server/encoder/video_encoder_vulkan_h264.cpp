@@ -113,6 +113,7 @@ std::vector<void *> video_encoder_vulkan_h264::setup_slot_info(size_t dpb_size)
 
 std::unique_ptr<video_encoder_vulkan_h264> video_encoder_vulkan_h264::create(
         wivrn_vk_bundle & vk,
+        size_t num_swapchain_images,
         xrt::drivers::wivrn::encoder_settings & settings,
         float fps)
 {
@@ -182,7 +183,7 @@ std::unique_ptr<video_encoder_vulkan_h264> video_encoder_vulkan_h264::create(
 		self->rate_control->pNext = &self->rate_control_h264;
 	}
 
-	self->init(video_caps, video_profile_info.get(), &session_create_info, &h264_session_params);
+	self->init(video_caps, video_profile_info.get(), num_swapchain_images, &session_create_info, &h264_session_params);
 
 	return self;
 }

@@ -281,7 +281,7 @@ VideoEncoderNvenc::VideoEncoderNvenc(wivrn_vk_bundle & vk, const encoder_setting
 	CU_CHECK(cuda_fn->cuCtxPopCurrent(NULL));
 }
 
-void VideoEncoderNvenc::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
+void VideoEncoderNvenc::PresentImage(size_t index, yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
 {
 	cmd_buf.copyImageToBuffer(
 	        src_yuv.luma,
@@ -325,7 +325,7 @@ void VideoEncoderNvenc::PresentImage(yuv_converter & src_yuv, vk::raii::CommandB
 	return;
 }
 
-void VideoEncoderNvenc::Encode(bool idr, std::chrono::steady_clock::time_point pts)
+void VideoEncoderNvenc::Encode(size_t index, bool idr, std::chrono::steady_clock::time_point pts)
 {
 	CU_CHECK(cuda_fn->cuCtxPushCurrent(cuda));
 

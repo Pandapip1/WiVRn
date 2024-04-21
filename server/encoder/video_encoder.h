@@ -67,6 +67,7 @@ private:
 public:
 	static std::unique_ptr<VideoEncoder> Create(
 	        wivrn_vk_bundle &,
+	        size_t num_swapchain_images,
 	        encoder_settings & settings,
 	        uint8_t stream_idx,
 	        int input_width,
@@ -76,18 +77,19 @@ public:
 	virtual ~VideoEncoder() = default;
 
 	// called on present to submit command buffers for the image.
-	virtual void PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf) = 0;
+	virtual void PresentImage(size_t index, yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf) = 0;
 
 	// The other end lost a frame and needs to resynchronize
 	void SyncNeeded();
 
 	void Encode(wivrn_session & cnx,
+	            size_t swapchain_index,
 	            const to_headset::video_stream_data_shard::view_info_t & view_info,
 	            uint64_t frame_index);
 
 protected:
 	// called when command buffer finished executing
-	virtual void Encode(bool idr, std::chrono::steady_clock::time_point target_timestamp) = 0;
+	virtual void Encode(size_t index, bool idr, std::chrono::steady_clock::time_point target_timestamp) = 0;
 
 	void SendData(std::span<uint8_t> data, bool end_of_frame);
 };

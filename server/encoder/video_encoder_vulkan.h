@@ -62,9 +62,8 @@ class video_encoder_vulkan : public xrt::drivers::wivrn::VideoEncoder
 	buffer_allocation output_buffer;
 	size_t output_buffer_size;
 
-	image_allocation input_image;
-
-	vk::raii::ImageView input_image_view = nullptr;
+	std::vector<image_allocation> input_images;
+	std::vector<vk::raii::ImageView> input_image_views;
 
 	slot_info dpb_status = slot_info(0);
 
@@ -94,6 +93,7 @@ protected:
 
 	void init(const vk::VideoCapabilitiesKHR & video_caps,
 	          const vk::VideoProfileInfoKHR & video_profile,
+	          size_t num_input_images,
 	          void * video_session_create_next,
 	          void * session_params_next);
 
@@ -108,6 +108,6 @@ protected:
 	virtual vk::ExtensionProperties std_header_version() = 0;
 
 public:
-	void Encode(bool idr, std::chrono::steady_clock::time_point target_timestamp) override;
-	void PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf) override;
+	void Encode(size_t index, bool idr, std::chrono::steady_clock::time_point target_timestamp) override;
+	void PresentImage(size_t index, yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf) override;
 };
