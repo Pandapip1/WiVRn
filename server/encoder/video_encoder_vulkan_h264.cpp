@@ -18,6 +18,55 @@
 #include "video_encoder_vulkan_h264.h"
 #include "utils/wivrn_vk_bundle.h"
 
+static StdVideoH264LevelIdc compute_level(const StdVideoH264SequenceParameterSet & sps, float fps, uint32_t num_dpb_frames, size_t bitrate)
+{
+	// H264 required level, table A-1 of specification
+	struct limit
+	{
+		StdVideoH264LevelIdc level;
+		size_t macrobloc_per_s;
+		size_t frame_size; // in macroblocks
+		size_t dpb_size;   // in macroblocks
+		size_t bit_rate;   // in kb/s
+	};
+	const std::array limits = {
+	        // clang-format off
+	        //    level                        mb_per_s     frame    dpb     bitrate
+	        limit{STD_VIDEO_H264_LEVEL_IDC_1_0, 1'485     , 99     , 396    , 64     },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_1_1, 3'000     , 396    , 900    , 192    },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_1_2, 6'000     , 396    , 2'376  , 384    },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_1_3, 11'880    , 396    , 2'376  , 768    },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_2_0, 11'880    , 396    , 2'376  , 2'000  },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_2_1, 19'800    , 792    , 4'752  , 4'000  },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_2_2, 20'250    , 1'620  , 8'100  , 4'000  },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_3_0, 40'500    , 1'620  , 8'100  , 10'000 },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_3_1, 108'000   , 3'600  , 18'000 , 14'000 },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_3_2, 216'000   , 5'120  , 20'480 , 20'000 },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_4_0, 245'760   , 8'192  , 32'768 , 20'000 },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_4_1, 245'760   , 8'192  , 32'768 , 50'000 },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_4_2, 522'240   , 8'704  , 34'816 , 50'000 },
+	        limit{STD_VIDEO_H264_LEVEL_IDC_5_0, 589'824   , 22'080 , 110'400, 135'000},
+	        limit{STD_VIDEO_H264_LEVEL_IDC_5_1, 983'040   , 36'864 , 184'320, 240'000},
+	        limit{STD_VIDEO_H264_LEVEL_IDC_5_2, 2'073'600 , 36'864 , 184'320, 240'000},
+	        limit{STD_VIDEO_H264_LEVEL_IDC_6_0, 4'177'920 , 139'264, 696'320, 240'000},
+	        limit{STD_VIDEO_H264_LEVEL_IDC_6_1, 8'355'840 , 139'264, 696'320, 480'000},
+	        limit{STD_VIDEO_H264_LEVEL_IDC_6_2, 16'711'680, 139'264, 696'320, 800'000},
+	        // clang-format on
+	};
+
+	const size_t frame_size = (sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1);
+	const size_t macroblocks_per_s = frame_size * fps + 1;
+	const size_t dpb_size = frame_size * num_dpb_frames;
+
+	for (const auto & level: limits)
+	{
+		if (level.macrobloc_per_s >= macroblocks_per_s and level.frame_size >= frame_size and level.dpb_size >= dpb_size and 1000 * level.bit_rate >= bitrate)
+			return level.level;
+	}
+
+	return STD_VIDEO_H264_LEVEL_IDC_6_2;
+}
+
 video_encoder_vulkan_h264::video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::Rect2D rect, vk::VideoEncodeCapabilitiesKHR encode_caps, float fps, uint64_t bitrate) :
         video_encoder_vulkan(vk, rect, encode_caps, fps, bitrate),
         sps{
@@ -41,7 +90,7 @@ video_encoder_vulkan_h264::video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::R
                                 .vui_parameters_present_flag = 0,
                         },
                 .profile_idc = STD_VIDEO_H264_PROFILE_IDC_HIGH,
-                .level_idc = STD_VIDEO_H264_LEVEL_IDC_5_1,
+                .level_idc = STD_VIDEO_H264_LEVEL_IDC_INVALID,
                 .chroma_format_idc = STD_VIDEO_H264_CHROMA_FORMAT_IDC_420,
                 .seq_parameter_set_id = 0,
                 .bit_depth_luma_minus8 = 0,
@@ -89,6 +138,7 @@ video_encoder_vulkan_h264::video_encoder_vulkan_h264(wivrn_vk_bundle & vk, vk::R
                 .pScalingLists = nullptr,
         }
 {
+	sps.level_idc = compute_level(sps, fps, num_dpb_slots, bitrate);
 	if (not std::ranges::any_of(vk.device_extensions, [](std::string_view ext) { return ext == VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME; }))
 	{
 		throw std::runtime_error("Vulkan video encode H264 extension not available");
