@@ -22,6 +22,7 @@
 #include "util/u_logging.h"
 #include "utils/wivrn_vk_bundle.h"
 
+#include <magic_enum.hpp>
 #include <stdexcept>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
@@ -73,6 +74,21 @@ void VideoEncoderNvenc::deleter::operator()(NvencFunctions * fn)
 	nvenc_free_functions(&fn);
 }
 
+static GUID codec_guid(video_codec codec)
+{
+	switch (codec)
+	{
+		case h264:
+			return NV_ENC_CODEC_H264_GUID;
+		case h265:
+			return NV_ENC_CODEC_HEVC_GUID;
+		case av1:
+			return NV_ENC_CODEC_AV1_GUID;
+	}
+	assert(false);
+	__builtin_unreachable();
+}
+
 VideoEncoderNvenc::VideoEncoderNvenc(wivrn_vk_bundle & vk, const encoder_settings & settings, float fps) :
         vk(vk), fps(fps), bitrate(settings.bitrate)
 {
@@ -122,21 +138,13 @@ VideoEncoderNvenc::VideoEncoderNvenc(wivrn_vk_bundle & vk, const encoder_setting
 
 	uint32_t count;
 	std::vector<GUID> presets;
-	auto encodeGUID = settings.codec == video_codec::h264 ? NV_ENC_CODEC_H264_GUID : NV_ENC_CODEC_HEVC_GUID;
+	GUID encodeGUID = codec_guid(settings.codec);
 	NVENC_CHECK(fn.nvEncGetEncodePresetCount(session_handle, encodeGUID, &count));
 	presets.resize(count);
 	NVENC_CHECK(fn.nvEncGetEncodePresetGUIDs(session_handle, encodeGUID, presets.data(), count, &count));
 
-	switch (settings.codec)
-	{
-		case video_codec::h264:
-			printf("%d H264 presets\n", count);
-			break;
-
-		case video_codec::h265:
-			printf("%d HEVC presets\n", count);
-			break;
-	}
+	std::string codec_name(magic_enum::enum_name(settings.codec));
+	printf("%d %s presets\n", count, codec_name.c_str());
 
 	for (GUID & i: presets)
 	{
@@ -149,12 +157,7 @@ VideoEncoderNvenc::VideoEncoderNvenc(wivrn_vk_bundle & vk, const encoder_setting
 	int cap_value;
 	NVENC_CHECK(fn.nvEncGetEncodeCaps(session_handle, encodeGUID, &cap_param, &cap_value));
 
-	// auto presetGUID = codec == video_codec::h264 ? NV_ENC_PRESET_LOW_LATENCY_DEFAULT_GUID :
-	// NV_ENC_PRESET_P7_GUID;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	auto presetGUID = NV_ENC_PRESET_LOW_LATENCY_HQ_GUID;
-#pragma GCC diagnostic pop
+	auto presetGUID = NV_ENC_PRESET_P1_GUID;
 	NV_ENC_PRESET_CONFIG preset_config;
 	preset_config.version = NV_ENC_PRESET_CONFIG_VER;
 	preset_config.presetCfg.version = NV_ENC_CONFIG_VER;
@@ -163,7 +166,7 @@ VideoEncoderNvenc::VideoEncoderNvenc(wivrn_vk_bundle & vk, const encoder_setting
 	NV_ENC_CONFIG params = preset_config.presetCfg;
 
 	// Bitrate control
-	params.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR_LOWDELAY_HQ;
+	params.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR;
 	params.rcParams.averageBitRate = bitrate;
 	params.rcParams.maxBitRate = bitrate;
 	params.rcParams.vbvBufferSize = bitrate / fps;
@@ -184,6 +187,9 @@ VideoEncoderNvenc::VideoEncoderNvenc(wivrn_vk_bundle & vk, const encoder_setting
 			params.encodeCodecConfig.hevcConfig.maxNumRefFramesInDPB = 0;
 			params.encodeCodecConfig.hevcConfig.idrPeriod = NVENC_INFINITE_GOPLENGTH;
 			break;
+		case video_codec::av1:
+			params.encodeCodecConfig.av1Config.repeatSeqHdr = 1;
+			params.encodeCodecConfig.av1Config.idrPeriod = NVENC_INFINITE_GOPLENGTH;
 	}
 
 	NV_ENC_INITIALIZE_PARAMS params2{};

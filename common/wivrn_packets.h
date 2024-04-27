@@ -80,6 +80,7 @@ enum video_codec
 	h264,
 	h265,
 	hevc = h265,
+	av1,
 };
 
 struct audio_data
