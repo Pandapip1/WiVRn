@@ -106,8 +106,8 @@ public:
 
 	deserialization_packet receive_raw();
 	std::pair<xrt::drivers::wivrn::deserialization_packet, sockaddr_in6> receive_from_raw();
-	void send_raw(const std::vector<uint8_t> & data);
-	void send_raw(const std::vector<std::span<uint8_t>> & data);
+	size_t send_raw(const std::vector<uint8_t> & data);
+	size_t send_raw(const std::vector<std::span<uint8_t>> & data);
 
 	void connect(in6_addr address, int port);
 	void connect(in_addr address, int port);
@@ -132,7 +132,7 @@ public:
 	explicit TCP(int fd);
 
 	deserialization_packet receive_raw();
-	void send_raw(const std::vector<std::span<uint8_t>> & data);
+	size_t send_raw(const std::vector<std::span<uint8_t>> & data);
 };
 
 class TCPListener : public fd_base
@@ -195,14 +195,14 @@ public:
 	}
 
 	template <typename T>
-	void send(T && data)
+	size_t send(T && data)
 	{
 		thread_local serialization_packet p;
 		p.clear();
 		uint8_t index = details::Index<std::decay_t<T>, std::tuple<VariantTypes...>>::value;
 		p.serialize(index);
 		p.serialize(std::forward<T>(data));
-		this->send_raw(p);
+		return this->send_raw(p);
 	}
 };
 

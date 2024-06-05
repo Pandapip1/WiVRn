@@ -23,6 +23,7 @@
 #include "wivrn_sockets.h"
 #include <optional>
 #include <poll.h>
+#include <thread>
 
 using namespace xrt::drivers::wivrn;
 
@@ -31,6 +32,9 @@ class wivrn_connection
 	typed_socket<TCP, from_headset::packets, to_headset::packets> control;
 	typed_socket<UDP, from_headset::packets, to_headset::packets> stream;
 	std::atomic<bool> active = false;
+	std::mutex stream_throttle_mutex;
+	std::chrono::steady_clock::time_point next_stream_send;
+	uint64_t bitrate = 1'000'000'000;
 
 	void init();
 
@@ -60,12 +64,22 @@ public:
 		}
 	}
 	template <typename T>
-	void send_stream(T && packet)
+	void send_stream(T && packet, bool expedite = false)
 	{
 		try
 		{
 			if (active and stream)
-				stream.send(std::forward<T>(packet));
+			{
+				if (expedite)
+					stream.send(std::forward<T>(packet));
+				else
+				{
+					std::lock_guard lock(stream_throttle_mutex);
+					std::this_thread::sleep_until(next_stream_send);
+					size_t size = stream.send(std::forward<T>(packet));
+					next_stream_send = std::chrono::steady_clock::now() + std::chrono::nanoseconds((long(1'000'000'000) * size) / (8 * bitrate));
+				}
+			}
 			else
 				control.send(std::forward<T>(packet));
 		}

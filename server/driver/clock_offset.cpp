@@ -44,7 +44,8 @@ void clock_offset_estimator::request_sample(wivrn_connection & connection)
 	connection.send_stream(
 	        xrt::drivers::wivrn::to_headset::timesync_query{
 	                .query = XrTime(os_monotonic_get_ns()),
-	        });
+	        },
+	        true);
 }
 
 void clock_offset_estimator::add_sample(const xrt::drivers::wivrn::from_headset::timesync_response & base_sample)

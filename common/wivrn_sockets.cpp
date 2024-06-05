@@ -286,24 +286,29 @@ xrt::drivers::wivrn::deserialization_packet xrt::drivers::wivrn::UDP::receive_ra
 	return deserialization_packet{std::move(buffer)};
 }
 
-void xrt::drivers::wivrn::UDP::send_raw(const std::vector<uint8_t> & data)
+size_t xrt::drivers::wivrn::UDP::send_raw(const std::vector<uint8_t> & data)
 {
 	ssize_t sent = ::send(fd, data.data(), data.size(), 0);
 	if (sent < 0)
 		throw std::system_error{errno, std::generic_category()};
 
 	bytes_sent_ += sent;
+	return sent;
 }
 
-void xrt::drivers::wivrn::UDP::send_raw(const std::vector<std::span<uint8_t>> & data)
+size_t xrt::drivers::wivrn::UDP::send_raw(const std::vector<std::span<uint8_t>> & data)
 {
 	thread_local std::vector<iovec> spans;
 	spans.clear();
 	for (const auto & span: data)
 		spans.emplace_back((void *)span.data(), span.size());
 
-	if (::writev(fd, spans.data(), spans.size()) < 0)
+	ssize_t sent = ::writev(fd, spans.data(), spans.size());
+	if (sent < 0)
 		throw std::system_error{errno, std::generic_category()};
+
+	bytes_sent_ += sent;
+	return sent;
 }
 
 xrt::drivers::wivrn::deserialization_packet xrt::drivers::wivrn::TCP::receive_raw()
@@ -348,7 +353,7 @@ xrt::drivers::wivrn::deserialization_packet xrt::drivers::wivrn::TCP::receive_ra
 	return deserialization_packet{std::move(new_buffer), sizeof(uint16_t)};
 }
 
-void xrt::drivers::wivrn::TCP::send_raw(const std::vector<std::span<uint8_t>> & spans)
+size_t xrt::drivers::wivrn::TCP::send_raw(const std::vector<std::span<uint8_t>> & spans)
 {
 	thread_local std::vector<iovec> iovecs;
 	iovecs.clear();
@@ -393,7 +398,7 @@ void xrt::drivers::wivrn::TCP::send_raw(const std::vector<std::span<uint8_t>> & 
 			--hdr.msg_iovlen;
 		}
 		if (hdr.msg_iovlen == 0)
-			return;
+			return size;
 		*(uintptr_t *)&hdr.msg_iov[0].iov_base += sent;
 		hdr.msg_iov[0].iov_len -= sent;
 	}
