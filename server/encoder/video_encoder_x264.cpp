@@ -21,7 +21,6 @@
 
 #include "util/u_logging.h"
 #include "utils/wivrn_vk_bundle.h"
-#include "yuv_converter.h"
 #include <stdexcept>
 
 namespace xrt::drivers::wivrn
@@ -179,12 +178,12 @@ VideoEncoderX264::VideoEncoderX264(
 	pic.img.plane[1] = (uint8_t *)chroma.map();
 }
 
-void VideoEncoderX264::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
+void VideoEncoderX264::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::CommandBuffer & cmd_buf)
 {
 	cmd_buf.copyImageToBuffer(
-	        src_yuv.luma,
-	        vk::ImageLayout::eTransferSrcOptimal,
 	        luma,
+	        vk::ImageLayout::eTransferSrcOptimal,
+	        this->luma,
 	        vk::BufferImageCopy{
 	                .bufferRowLength = chroma_width * 2,
 	                .imageSubresource = {
@@ -201,9 +200,9 @@ void VideoEncoderX264::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBu
 	                        .depth = 1,
 	                }});
 	cmd_buf.copyImageToBuffer(
-	        src_yuv.chroma,
-	        vk::ImageLayout::eTransferSrcOptimal,
 	        chroma,
+	        vk::ImageLayout::eTransferSrcOptimal,
+	        this->chroma,
 	        vk::BufferImageCopy{
 	                .bufferRowLength = chroma_width,
 	                .imageSubresource = {

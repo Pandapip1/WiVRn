@@ -18,7 +18,6 @@
  */
 
 #include "video_encoder_nvenc.h"
-#include "encoder/yuv_converter.h"
 #include "util/u_logging.h"
 #include "utils/wivrn_vk_bundle.h"
 
@@ -313,10 +312,10 @@ VideoEncoderNvenc::~VideoEncoderNvenc()
 		fn.nvEncDestroyEncoder(session_handle);
 }
 
-void VideoEncoderNvenc::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
+void VideoEncoderNvenc::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::CommandBuffer & cmd_buf)
 {
 	cmd_buf.copyImageToBuffer(
-	        src_yuv.luma,
+	        luma,
 	        vk::ImageLayout::eTransferSrcOptimal,
 	        *yuv_buffer,
 	        vk::BufferImageCopy{
@@ -335,7 +334,7 @@ void VideoEncoderNvenc::PresentImage(yuv_converter & src_yuv, vk::raii::CommandB
 	                        .depth = 1,
 	                }});
 	cmd_buf.copyImageToBuffer(
-	        src_yuv.chroma,
+	        chroma,
 	        vk::ImageLayout::eTransferSrcOptimal,
 	        *yuv_buffer,
 	        vk::BufferImageCopy{

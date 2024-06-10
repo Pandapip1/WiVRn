@@ -21,7 +21,6 @@
 
 #include "video_encoder_va.h"
 
-#include "encoder/yuv_converter.h"
 #include "util/u_logging.h"
 #include "utils/wivrn_vk_bundle.h"
 
@@ -349,7 +348,7 @@ video_encoder_va::video_encoder_va(wivrn_vk_bundle & vk, xrt::drivers::wivrn::en
 	}
 }
 
-void video_encoder_va::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBuffer & cmd_buf)
+void video_encoder_va::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::CommandBuffer & cmd_buf)
 {
 	std::array im_barriers = {
 	        vk::ImageMemoryBarrier{
@@ -357,7 +356,7 @@ void video_encoder_va::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBu
 	                .dstAccessMask = vk::AccessFlagBits::eMemoryWrite,
 	                .oldLayout = vk::ImageLayout::eUndefined,
 	                .newLayout = vk::ImageLayout::eTransferDstOptimal,
-	                .image = *luma,
+	                .image = *this->luma,
 	                .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
 	                                     .baseMipLevel = 0,
 	                                     .levelCount = 1,
@@ -369,7 +368,7 @@ void video_encoder_va::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBu
 	                .dstAccessMask = vk::AccessFlagBits::eMemoryWrite,
 	                .oldLayout = vk::ImageLayout::eUndefined,
 	                .newLayout = vk::ImageLayout::eTransferDstOptimal,
-	                .image = *chroma,
+	                .image = *this->chroma,
 	                .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
 	                                     .baseMipLevel = 0,
 	                                     .levelCount = 1,
@@ -386,9 +385,9 @@ void video_encoder_va::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBu
 	        im_barriers);
 
 	cmd_buf.copyImage(
-	        src_yuv.luma,
+	        luma,
 	        vk::ImageLayout::eTransferSrcOptimal,
-	        *luma,
+	        *this->luma,
 	        vk::ImageLayout::eTransferDstOptimal,
 	        vk::ImageCopy{
 	                .srcSubresource = {
@@ -410,9 +409,9 @@ void video_encoder_va::PresentImage(yuv_converter & src_yuv, vk::raii::CommandBu
 	                }});
 
 	cmd_buf.copyImage(
-	        src_yuv.chroma,
+	        chroma,
 	        vk::ImageLayout::eTransferSrcOptimal,
-	        *chroma,
+	        *this->chroma,
 	        vk::ImageLayout::eTransferDstOptimal,
 	        vk::ImageCopy{
 	                .srcSubresource = {

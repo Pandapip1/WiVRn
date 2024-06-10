@@ -502,7 +502,7 @@ static VkResult comp_wivrn_present(struct comp_target * ct,
 	yuv.record_draw_commands(command_buffer);
 	for (auto & encoder: cn->encoders)
 	{
-		encoder->PresentImage(yuv, command_buffer);
+		encoder->PresentImage(yuv.luma, yuv.chroma, command_buffer);
 	}
 	command_buffer.end();
 
