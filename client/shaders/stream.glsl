@@ -63,7 +63,7 @@ vec4 sRGB_to_linear_rgba(vec4 x)
 		sRGB_to_linear(x.r),
 		sRGB_to_linear(x.g),
 		sRGB_to_linear(x.b),
-		x.a
+		x.r
 	);
 }
 

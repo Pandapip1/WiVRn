@@ -27,16 +27,18 @@ class yuv_converter
 {
 	vk::Extent2D extent;
 
-	vk::Image rgb;
+	vk::Image rgba;
 
 public:
 	image_allocation luma;
 	image_allocation chroma;
+	image_allocation alpha;
 
 private:
-	vk::raii::ImageView view_rgb = nullptr;
+	vk::raii::ImageView view_rgba = nullptr;
 	vk::raii::ImageView view_luma = nullptr;
 	vk::raii::ImageView view_chroma = nullptr;
+	vk::raii::ImageView view_alpha = nullptr;
 
 	vk::raii::DescriptorSetLayout ds_layout = nullptr;
 	vk::raii::PipelineLayout layout = nullptr;
@@ -52,7 +54,7 @@ public:
 
 	// Converts the given image to yuv, stored in luma and chroma images.
 	// The output images will be in transfer src optimal layout
-	void record_draw_commands(vk::raii::CommandBuffer & cmd_buf);
+	void record_draw_commands(vk::raii::CommandBuffer & cmd_buf, bool do_alpha);
 
 	void assemble_planes(vk::Rect2D, vk::raii::CommandBuffer &, vk::Image target);
 };

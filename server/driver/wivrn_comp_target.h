@@ -96,7 +96,12 @@ struct wivrn_comp_target : public comp_target
 	std::vector<encoder_settings> settings;
 	to_headset::video_stream_description desc{};
 	std::list<encoder_thread> encoder_threads;
-	std::vector<std::shared_ptr<VideoEncoder>> encoders;
+	struct encoder_pair
+	{
+		std::shared_ptr<VideoEncoder> yuv;
+		std::shared_ptr<VideoEncoder> alpha;
+	};
+	std::vector<encoder_pair> encoders;
 
 	std::shared_ptr<xrt::drivers::wivrn::wivrn_session> cnx;
 

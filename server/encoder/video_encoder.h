@@ -77,6 +77,7 @@ public:
 	virtual ~VideoEncoder() = default;
 
 	// called on present to submit command buffers for the image.
+	// chroma may be null, in case of monochrome output
 	virtual void PresentImage(vk::Image luma, vk::Image chroma, vk::raii::CommandBuffer & cmd_buf) = 0;
 
 	// The other end lost a frame and needs to resynchronize

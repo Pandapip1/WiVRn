@@ -153,6 +153,7 @@ VideoEncoderX264::VideoEncoderX264(
 	param.vui.i_colmatrix = 1; // BT.709
 	settings.color_model = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
 	param.vui.i_transfer = 13; // sRGB
+	param.i_csp = X264_CSP_NV12;
 
 	param.vui.i_sar_width = settings.width;
 	param.vui.i_sar_height = settings.height;
@@ -171,11 +172,12 @@ VideoEncoderX264::VideoEncoderX264(
 	pic.opaque = this;
 	pic.img.i_csp = X264_CSP_NV12;
 	pic.img.i_plane = 2;
-
-	pic.img.i_stride[0] = settings.video_width;
 	pic.img.plane[0] = (uint8_t *)luma.map();
-	pic.img.i_stride[1] = settings.video_width;
+	pic.img.i_stride[0] = settings.video_width;
 	pic.img.plane[1] = (uint8_t *)chroma.map();
+	pic.img.i_stride[1] = settings.video_width;
+
+	memset(pic.img.plane[1], 0, settings.video_width * settings.video_height / 2);
 }
 
 void VideoEncoderX264::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::CommandBuffer & cmd_buf)
@@ -199,25 +201,28 @@ void VideoEncoderX264::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::
 	                        .height = rect.extent.height,
 	                        .depth = 1,
 	                }});
-	cmd_buf.copyImageToBuffer(
-	        chroma,
-	        vk::ImageLayout::eTransferSrcOptimal,
-	        this->chroma,
-	        vk::BufferImageCopy{
-	                .bufferRowLength = chroma_width,
-	                .imageSubresource = {
-	                        .aspectMask = vk::ImageAspectFlagBits::eColor,
-	                        .layerCount = 1,
-	                },
-	                .imageOffset = {
-	                        .x = rect.offset.x / 2,
-	                        .y = rect.offset.y / 2,
-	                },
-	                .imageExtent = {
-	                        .width = rect.extent.width / 2,
-	                        .height = rect.extent.height / 2,
-	                        .depth = 1,
-	                }});
+	if (chroma)
+	{
+		cmd_buf.copyImageToBuffer(
+		        chroma,
+		        vk::ImageLayout::eTransferSrcOptimal,
+		        this->chroma,
+		        vk::BufferImageCopy{
+		                .bufferRowLength = chroma_width,
+		                .imageSubresource = {
+		                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+		                        .layerCount = 1,
+		                },
+		                .imageOffset = {
+		                        .x = rect.offset.x / 2,
+		                        .y = rect.offset.y / 2,
+		                },
+		                .imageExtent = {
+		                        .width = rect.extent.width / 2,
+		                        .height = rect.extent.height / 2,
+		                        .depth = 1,
+		                }});
+	}
 }
 
 void VideoEncoderX264::Encode(bool idr, std::chrono::steady_clock::time_point pts)

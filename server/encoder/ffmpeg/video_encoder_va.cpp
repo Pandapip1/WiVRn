@@ -140,7 +140,12 @@ video_encoder_va::video_encoder_va(wivrn_vk_bundle & vk, xrt::drivers::wivrn::en
 	settings.video_width += settings.video_width % 2;
 	settings.video_height += settings.video_height % 2;
 
-	auto vaapi_frame_ctx = make_hwframe_ctx(vaapi_hw_ctx.get(), AV_PIX_FMT_VAAPI, AV_PIX_FMT_NV12, settings.video_width, settings.video_height);
+	auto vaapi_frame_ctx = make_hwframe_ctx(
+	        vaapi_hw_ctx.get(),
+	        AV_PIX_FMT_VAAPI,
+	        AV_PIX_FMT_NV12,
+	        settings.video_width,
+	        settings.video_height);
 
 	assert(av_pix_fmt_count_planes(AV_PIX_FMT_NV12) == 2);
 
@@ -204,10 +209,10 @@ video_encoder_va::video_encoder_va(wivrn_vk_bundle & vk, xrt::drivers::wivrn::en
 	encoder_ctx->sample_aspect_ratio = AVRational{1, 1};
 	encoder_ctx->pix_fmt = AV_PIX_FMT_VAAPI;
 	encoder_ctx->color_range = AVCOL_RANGE_JPEG;
+	settings.range = VK_SAMPLER_YCBCR_RANGE_ITU_FULL;
 	encoder_ctx->colorspace = AVCOL_SPC_BT709;
 	encoder_ctx->color_trc = AVCOL_TRC_BT709;
 	encoder_ctx->color_primaries = AVCOL_PRI_BT709;
-	settings.range = VK_SAMPLER_YCBCR_RANGE_ITU_FULL;
 	settings.color_model = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
 	encoder_ctx->max_b_frames = 0;
 	encoder_ctx->bit_rate = settings.bitrate;
@@ -408,29 +413,32 @@ void video_encoder_va::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::
 	                        .depth = 1,
 	                }});
 
-	cmd_buf.copyImage(
-	        chroma,
-	        vk::ImageLayout::eTransferSrcOptimal,
-	        *this->chroma,
-	        vk::ImageLayout::eTransferDstOptimal,
-	        vk::ImageCopy{
-	                .srcSubresource = {
-	                        .aspectMask = vk::ImageAspectFlagBits::eColor,
-	                        .layerCount = 1,
-	                },
-	                .srcOffset = {
-	                        .x = rect.offset.x / 2,
-	                        .y = rect.offset.y / 2,
-	                },
-	                .dstSubresource = {
-	                        .aspectMask = vk::ImageAspectFlagBits::eColor,
-	                        .layerCount = 1,
-	                },
-	                .extent = {
-	                        .width = rect.extent.width / 2,
-	                        .height = rect.extent.height / 2,
-	                        .depth = 1,
-	                }});
+	if (chroma)
+	{
+		cmd_buf.copyImage(
+		        chroma,
+		        vk::ImageLayout::eTransferSrcOptimal,
+		        *this->chroma,
+		        vk::ImageLayout::eTransferDstOptimal,
+		        vk::ImageCopy{
+		                .srcSubresource = {
+		                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+		                        .layerCount = 1,
+		                },
+		                .srcOffset = {
+		                        .x = rect.offset.x / 2,
+		                        .y = rect.offset.y / 2,
+		                },
+		                .dstSubresource = {
+		                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+		                        .layerCount = 1,
+		                },
+		                .extent = {
+		                        .width = rect.extent.width / 2,
+		                        .height = rect.extent.height / 2,
+		                        .depth = 1,
+		                }});
+	}
 }
 
 void video_encoder_va::PushFrame(bool idr, std::chrono::steady_clock::time_point pts)

@@ -16,6 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include "utils/overloaded.h"
 #define GLM_FORCE_RADIANS
 
 #include "stream.h"
@@ -120,6 +121,8 @@ std::shared_ptr<scenes::stream> scenes::stream::create(std::unique_ptr<wivrn_ses
 		spdlog::warn("Unable to detect refresh rates");
 
 	info.hand_tracking = application::get_hand_tracking_supported();
+
+	info.passthrough_supported = self->system.passthrough_supported() != xr::system::passthrough_type::no_passthrough;
 
 	audio::get_audio_description(info);
 	if (not application::get_config().microphone)
@@ -260,7 +263,7 @@ void scenes::stream::push_blit_handle(shard_accumulator * decoder, std::shared_p
 		}
 
 		if (state_ != state::streaming && std::all_of(decoders.begin(), decoders.end(), [](accumulator_images & i) {
-			    return i.latest_frames.back();
+			    return i.latest_frames.back() or i.alpha;
 		    }))
 		{
 			state_ = state::streaming;
@@ -295,6 +298,9 @@ std::optional<uint64_t> scenes::stream::accumulator_images::common_frame(const s
 	auto proj = [](const shard_accumulator::blit_handle * h) { return h ? h->feedback.frame_index : -1; };
 	for (size_t i = 0; i < sets.size(); ++i)
 	{
+		// Don't consider alpha channel
+		if (sets[i].alpha)
+			continue;
 		if (i == 0)
 		{
 			for (const auto & h: sets[i].latest_frames)
@@ -466,7 +472,8 @@ void scenes::stream::render(const XrFrameState & frame_state)
 			                .rasterizationSamples = vk::SampleCountFlagBits::e1,
 			        }},
 			        .ColorBlendState = {.flags = {}},
-			        .ColorBlendAttachments = {{.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB}},
+			        .ColorBlendAttachments = {
+			                {.colorWriteMask = i.alpha ? vk::ColorComponentFlagBits::eA : vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB}},
 			        .DynamicState = {.flags = {}},
 			        .DynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor},
 			        .layout = *i.blit_pipeline_layout,
@@ -666,8 +673,26 @@ void scenes::stream::render(const XrFrameState & frame_state)
 	submit_info.setCommandBuffers(*command_buffer);
 	queue.submit(submit_info, *fence);
 
+	XrEnvironmentBlendMode blend_mode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 	std::vector<XrCompositionLayerBaseHeader *> layers_base;
 	std::vector<XrCompositionLayerProjectionView> layer_view(view_count);
+
+	if (not current_blit_handles.empty() and current_blit_handles[0]->view_info.alpha)
+	{
+		session.enable_passthrough(system);
+		std::visit(
+		        utils::overloaded{
+		                [&](std::monostate &) {
+			                assert(false);
+		                },
+		                [&](xr::passthrough_alpha_blend & p) {
+			                blend_mode = XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
+		                },
+		                [&](auto & p) {
+			                layers_base.push_back(p.layer());
+		                }},
+		        session.get_passthrough());
+	}
 
 	for (size_t swapchain_index = 0; swapchain_index < view_count; swapchain_index++)
 	{
@@ -694,7 +719,7 @@ void scenes::stream::render(const XrFrameState & frame_state)
 
 	XrCompositionLayerProjection layer{
 	        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-	        .layerFlags = 0,
+	        .layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT,
 	        .space = local_floor,
 	        .viewCount = (uint32_t)layer_view.size(),
 	        .views = layer_view.data(),
@@ -712,7 +737,7 @@ void scenes::stream::render(const XrFrameState & frame_state)
 	if (imgui_ctx and plots_visible)
 		layers_base.push_back(reinterpret_cast<XrCompositionLayerBaseHeader *>(&imgui_layer));
 
-	session.end_frame(frame_state.predictedDisplayTime, layers_base);
+	session.end_frame(frame_state.predictedDisplayTime, layers_base, blend_mode);
 
 	// Network operations may be blocking, do them once everything was submitted
 	for (const auto & handle: current_blit_handles)
@@ -851,12 +876,12 @@ void scenes::stream::setup(const to_headset::video_stream_description & descript
 	{
 		vk::DescriptorPoolSize pool_size{
 		        .type = vk::DescriptorType::eCombinedImageSampler,
-		        .descriptorCount = uint32_t(description.items.size()),
+		        .descriptorCount = uint32_t(2 * description.items.size()),
 		};
 		blit_descriptor_pool = vk::raii::DescriptorPool(
 		        device,
 		        vk::DescriptorPoolCreateInfo{
-		                .maxSets = uint32_t(description.items.size()),
+		                .maxSets = uint32_t(2 * description.items.size()),
 		                .poolSizeCount = 1,
 		                .pPoolSizes = &pool_size,
 		        });
@@ -875,10 +900,14 @@ void scenes::stream::setup(const to_headset::video_stream_description & descript
 			spdlog::warn("Failed to set refresh rate to {}: {}", description.fps, e.what());
 		}
 
-		accumulator_images dec;
-		dec.decoder = std::make_unique<shard_accumulator>(device, physical_device, item, description.fps, shared_from_this(), stream_index);
-
-		decoders.push_back(std::move(dec));
+		decoders.push_back(accumulator_images{
+		        .decoder = std::make_unique<shard_accumulator>(device, physical_device, item, description.fps, shared_from_this(), stream_index),
+		        .alpha = false,
+		});
+		decoders.push_back(accumulator_images{
+		        .decoder = std::make_unique<shard_accumulator>(device, physical_device, item, description.fps, shared_from_this(), stream_index + 128),
+		        .alpha = true,
+		});
 	}
 }
 

@@ -2,19 +2,21 @@
 
 layout(binding = 0, rgba8) uniform readonly image2D rgb;
 layout(binding = 1, r8) uniform writeonly image2D luminance;
+layout(binding = 2, r8) uniform writeonly image2D alpha;
 
 #define SEMIPLANAR
 
 #ifdef SEMIPLANAR
-layout(binding = 2, rg8) uniform writeonly image2D chroma_uv;
+layout(binding = 3, rg8) uniform writeonly image2D chroma_uv;
 #else
-layout(binding = 2, r8) uniform writeonly image2D chroma_u;
-layout(binding = 3, r8) uniform writeonly image2D chroma_v;
+layout(binding = 3, r8) uniform writeonly image2D chroma_u;
+layout(binding = 4, r8) uniform writeonly image2D chroma_v;
 #endif
 
 layout(push_constant) uniform PushConstants
 {
 	mat3 color_space;
+	bool alpha;
 }
 pcs;
 
@@ -58,6 +60,10 @@ void main()
 			vec3 yuv = rgb_to_ycbcr(texel.rgb);
 
 			imageStore(luminance, texel_coords, vec4(yuv.x));
+			if (pcs.alpha)
+			{
+				imageStore(alpha, texel_coords, vec4(texel.a));
+			}
 
 			int i = k * 2 + j;
 			uvs[i] = yuv.yz;

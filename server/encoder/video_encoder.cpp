@@ -107,6 +107,8 @@ void VideoEncoder::Encode(wivrn_session & cnx,
                           const to_headset::video_stream_data_shard::view_info_t & view_info,
                           uint64_t frame_index)
 {
+	if (stream_idx > 127 and not view_info.alpha)
+		return;
 	this->cnx = &cnx;
 	auto target_timestamp = std::chrono::steady_clock::time_point(std::chrono::nanoseconds(view_info.display_time));
 	bool idr = sync_needed.exchange(false);

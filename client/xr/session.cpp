@@ -317,6 +317,9 @@ void xr::session::sync_actions(XrActionSet action_set, const std::string & subac
 
 void xr::session::enable_passthrough(xr::system & system)
 {
+	if (not std::holds_alternative<std::monostate>(passthrough))
+		return;
+
 	if (system.passthrough_supported() == xr::system::passthrough_type::no_passthrough)
 		return;
 
@@ -336,5 +339,7 @@ void xr::session::enable_passthrough(xr::system & system)
 
 void xr::session::disable_passthrough()
 {
+	if (std::holds_alternative<std::monostate>(passthrough))
+		return;
 	passthrough.emplace<std::monostate>();
 }

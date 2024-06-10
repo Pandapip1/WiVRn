@@ -27,6 +27,7 @@
 #include "render/scene_data.h"
 #include "render/scene_renderer.h"
 #include "stream.h"
+#include "utils/overloaded.h"
 #include "version.h"
 #include "wifi_lock.h"
 #include "wivrn_client.h"
@@ -466,17 +467,6 @@ static std::vector<XrCompositionLayerProjectionView> render_layer(std::vector<Xr
 	return layer_views;
 }
 
-namespace
-{
-template <class... Ts>
-struct overloaded : Ts...
-{
-	using Ts::operator()...;
-};
-template <class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-} // namespace
-
 void scenes::lobby::render(const XrFrameState & frame_state)
 {
 	if (async_session.valid() && async_session.poll() == utils::future_status::ready)
@@ -626,7 +616,7 @@ void scenes::lobby::render(const XrFrameState & frame_state)
 	if (application::get_config().passthrough_enabled)
 	{
 		std::visit(
-		        overloaded{
+		        utils::overloaded{
 		                [&](std::monostate &) {
 			                assert(false);
 		                },

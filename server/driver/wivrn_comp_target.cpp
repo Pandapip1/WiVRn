@@ -23,6 +23,7 @@
 #include "math/m_space.h"
 #include "utils/scoped_lock.h"
 #include "xrt_cast.h"
+#include <magic_enum.hpp>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_core.h>
@@ -115,10 +116,12 @@ static void create_encoders(wivrn_comp_target * cn)
 	{
 		uint8_t stream_index = cn->encoders.size();
 		auto & encoder = cn->encoders.emplace_back(
-		        VideoEncoder::Create(*cn->wivrn_bundle, settings, stream_index, desc.width, desc.height, desc.fps));
+		        VideoEncoder::Create(*cn->wivrn_bundle, settings, stream_index, desc.width, desc.height, desc.fps),
+		        VideoEncoder::Create(*cn->wivrn_bundle, settings, stream_index + 128, desc.width, desc.height, desc.fps));
 		desc.items.push_back(settings);
 
-		thread_params[settings.group].encoders.emplace_back(encoder);
+		thread_params[settings.group].encoders.emplace_back(encoder.alpha);
+		thread_params[settings.group].encoders.emplace_back(encoder.yuv);
 	}
 
 	for (auto & [group, params]: thread_params)
@@ -499,10 +502,13 @@ static VkResult comp_wivrn_present(struct comp_target * ct,
 	assert(ct->images != NULL);
 
 	auto & yuv = cn->psc.images[index].yuv;
-	yuv.record_draw_commands(command_buffer);
+	const bool do_alpha = cn->c->base.slot.data.env_blend_mode == XRT_BLEND_MODE_ALPHA_BLEND;
+	yuv.record_draw_commands(command_buffer, do_alpha);
 	for (auto & encoder: cn->encoders)
 	{
-		encoder->PresentImage(yuv.luma, yuv.chroma, command_buffer);
+		encoder.yuv->PresentImage(yuv.luma, yuv.chroma, command_buffer);
+		if (do_alpha)
+			encoder.alpha->PresentImage(yuv.alpha, nullptr, command_buffer);
 	}
 	command_buffer.end();
 
@@ -519,6 +525,7 @@ static VkResult comp_wivrn_present(struct comp_target * ct,
 	cn->psc.images[index].frame_index = cn->current_frame_id;
 
 	auto & view_info = cn->psc.images[index].view_info;
+	view_info.alpha = do_alpha;
 	view_info.display_time = cn->cnx->get_offset().to_headset(desired_present_time_ns);
 	for (int eye = 0; eye < 2; ++eye)
 	{
@@ -627,9 +634,13 @@ void wivrn_comp_target::on_feedback(const from_headset::feedback & feedback, con
 	pacer.on_feedback(feedback, o);
 	if (not feedback.sent_to_decoder)
 	{
-		if (encoders.size() < feedback.stream_index)
+		uint8_t stream = feedback.stream_index % 128;
+		if (encoders.size() < stream)
 			return;
-		encoders[feedback.stream_index]->SyncNeeded();
+		if (feedback.stream_index == stream)
+			encoders[stream].yuv->SyncNeeded();
+		else
+			encoders[stream].alpha->SyncNeeded();
 	}
 }
 
@@ -638,7 +649,8 @@ void wivrn_comp_target::reset_encoders()
 	pacer.reset();
 	for (auto & encoder: encoders)
 	{
-		encoder->SyncNeeded();
+		encoder.yuv->SyncNeeded();
+		encoder.alpha->SyncNeeded();
 	}
 	cnx->send_control(desc);
 }

@@ -38,7 +38,7 @@ class VideoEncoderX264 : public VideoEncoder
 	x264_picture_t pic_in;
 	x264_picture_t pic_out = {};
 
-	buffer_allocation luma;
+	buffer_allocation luma; // or alpha
 	buffer_allocation chroma;
 	uint32_t chroma_width;
 

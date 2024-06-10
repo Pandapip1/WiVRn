@@ -26,6 +26,7 @@
 #include "stream_reprojection.h"
 #include "wivrn_client.h"
 #include "wivrn_packets.h"
+#include "xr/passthrough.h"
 #include <mutex>
 #include <shared_mutex>
 #include <thread>
@@ -57,6 +58,7 @@ private:
 		vk::raii::Pipeline blit_pipeline = nullptr;
 		// latest frames from oldest to most recent
 		std::array<std::shared_ptr<shard_accumulator::blit_handle>, 3> latest_frames;
+		bool alpha;
 
 		static std::optional<uint64_t> common_frame(const std::vector<accumulator_images> &, XrTime display_time);
 		std::shared_ptr<shard_accumulator::blit_handle> frame(std::optional<uint64_t> id);
@@ -89,6 +91,8 @@ private:
 	std::array<renderpass_output, view_count> decoder_output{};
 
 	std::optional<stream_reprojection> reprojector;
+
+	std::optional<xr::passthrough> passthrough;
 
 	vk::raii::Fence fence = nullptr;
 	vk::raii::CommandBuffer command_buffer = nullptr;

@@ -107,6 +107,7 @@ struct headset_info_packet
 	std::optional<audio_description> microphone;
 	std::array<XrFovf, 2> fov;
 	bool hand_tracking;
+	bool passthrough_supported;
 };
 
 struct handshake
@@ -203,7 +204,7 @@ struct timesync_response
 struct feedback
 {
 	uint64_t frame_index;
-	uint8_t stream_index;
+	uint8_t stream_index; // 0-127 for yuv, 128-255 for alpha
 
 	// Timestamps
 	XrTime received_first_packet;
@@ -285,6 +286,7 @@ public:
 		end_of_frame = 1 << 2,
 	};
 	// Identifier of stream in video_stream_description
+	// elements > 127 are for alpha
 	uint8_t stream_item_idx;
 	// Counter increased for each frame
 	uint64_t frame_idx;
@@ -300,6 +302,8 @@ public:
 
 		std::array<XrPosef, 2> pose;
 		std::array<XrFovf, 2> fov;
+		// True when the frame contains an alpha channel
+		bool alpha;
 	};
 	std::optional<view_info_t> view_info;
 

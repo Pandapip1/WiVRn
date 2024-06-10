@@ -1,0 +1,34 @@
+diff --git a/src/xrt/compositor/multi/comp_multi_system.c b/src/xrt/compositor/multi/comp_multi_system.c
+index 6e1c01bdc..10661ce9e 100644
+--- a/src/xrt/compositor/multi/comp_multi_system.c
++++ b/src/xrt/compositor/multi/comp_multi_system.c
+@@ -499,6 +499,11 @@ multi_main_loop(struct multi_system_compositor *msc)
+ 
+ 		//! @todo Pick the blend mode from primary client.
+ 		enum xrt_blend_mode blend_mode = XRT_BLEND_MODE_OPAQUE;
++		for (int k = 0 ; k < MULTI_MAX_CLIENTS ; ++k)
++		{
++			if (msc->clients[k])
++				blend_mode = msc->clients[k]->delivered.data.env_blend_mode;
++		}
+ 
+ 		//! @todo Pick a good display time.
+ 		uint64_t display_time_ns = 0;
+diff --git a/src/xrt/compositor/shaders/distortion.comp b/src/xrt/compositor/shaders/distortion.comp
+index 08b44d4cf..876858ca1 100644
+--- a/src/xrt/compositor/shaders/distortion.comp
++++ b/src/xrt/compositor/shaders/distortion.comp
+@@ -131,10 +131,11 @@ void main()
+ 		texture(source[iz], r_uv).r,
+ 		texture(source[iz], g_uv).g,
+ 		texture(source[iz], b_uv).b,
+-		1);
++		texture(source[iz], g_uv).a
++		);
+ 
+ 	// Do colour correction here since there are no automatic conversion in hardware available.
+-	colour = vec4(from_linear_to_srgb(colour.rgb), 1);
++	colour = vec4(from_linear_to_srgb(colour.rgb), colour.a);
+ 
+ 	imageStore(target, ivec2(offset.x + ix, offset.y + iy), colour);
+ }
