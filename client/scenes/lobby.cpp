@@ -27,7 +27,6 @@
 #include "render/scene_data.h"
 #include "render/scene_renderer.h"
 #include "stream.h"
-#include "utils/contains.h"
 #include "version.h"
 #include "wifi_lock.h"
 #include "wivrn_client.h"
@@ -637,7 +636,7 @@ void scenes::lobby::render(const XrFrameState & frame_state)
 		                [&](auto & p) {
 			                layers_base.push_back(p.layer());
 		                }},
-		        passthrough);
+		        session.get_passthrough());
 	}
 	else
 	{
@@ -744,27 +743,10 @@ void scenes::lobby::on_focused()
 
 void scenes::lobby::setup_passthrough()
 {
-	auto & passthrough_enabled = application::get_config().passthrough_enabled;
-	if (not passthrough_enabled)
-	{
-		passthrough.emplace<std::monostate>();
-		return;
-	}
-	if (passthrough_supported != xr::system::passthrough_type::no_passthrough)
-	{
-		if (utils::contains(system.environment_blend_modes(XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO), XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND))
-		{
-			passthrough.emplace<xr::passthrough_alpha_blend>();
-		}
-		else if (utils::contains(application::get_xr_extensions(), XR_FB_PASSTHROUGH_EXTENSION_NAME))
-		{
-			passthrough.emplace<xr::passthrough_fb>(instance, session);
-		}
-		else if (utils::contains(application::get_xr_extensions(), XR_HTC_PASSTHROUGH_EXTENSION_NAME))
-		{
-			passthrough.emplace<xr::passthrough_htc>(instance, session);
-		}
-	}
+	if (application::get_config().passthrough_enabled)
+		session.enable_passthrough(system);
+	else
+		session.disable_passthrough();
 }
 
 void scenes::lobby::on_unfocused()
@@ -786,7 +768,7 @@ void scenes::lobby::on_unfocused()
 	swapchains_lobby.clear();
 	swapchains_controllers.clear();
 	swapchain_imgui = xr::swapchain();
-	passthrough.emplace<std::monostate>();
+	session.disable_passthrough();
 	wifi_lock::want_multicast(false);
 }
 

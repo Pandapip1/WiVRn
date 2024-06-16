@@ -27,6 +27,7 @@
 #include <openxr/openxr.h>
 
 #include "hand_tracker.h"
+#include "passthrough.h"
 #include "space.h"
 
 namespace xr
@@ -37,6 +38,7 @@ class system;
 class session : public utils::handle<XrSession, xrDestroySession>
 {
 	instance * inst = nullptr;
+	xr::passthrough passthrough;
 
 public:
 	session() = default;
@@ -75,5 +77,12 @@ public:
 	void sync_actions(XrActionSet action_set, const std::string & subaction_path);
 
 	void sync_actions(std::span<XrActionSet> action_sets);
+
+	void enable_passthrough(xr::system &);
+	void disable_passthrough();
+	xr::passthrough & get_passthrough()
+	{
+		return passthrough;
+	}
 };
 } // namespace xr
