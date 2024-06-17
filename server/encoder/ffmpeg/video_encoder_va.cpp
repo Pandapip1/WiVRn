@@ -439,6 +439,19 @@ void video_encoder_va::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::
 		                        .depth = 1,
 		                }});
 	}
+	else if (not chroma_cleared)
+	{
+		std::array<float, 4> clear{0.5f, 0.5f, 0.f, 0.f};
+		cmd_buf.clearColorImage(
+		        *this->chroma,
+		        vk::ImageLayout::eTransferDstOptimal,
+		        vk::ClearColorValue(clear),
+		        vk::ImageSubresourceRange{
+		                .aspectMask = vk::ImageAspectFlagBits::eColor,
+		                .layerCount = 1,
+		        });
+		chroma_cleared = true;
+	}
 }
 
 void video_encoder_va::PushFrame(bool idr, std::chrono::steady_clock::time_point pts)

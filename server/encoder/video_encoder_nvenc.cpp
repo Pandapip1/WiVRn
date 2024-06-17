@@ -333,27 +333,34 @@ void VideoEncoderNvenc::PresentImage(vk::Image luma, vk::Image chroma, vk::raii:
 	                        .height = rect.extent.height,
 	                        .depth = 1,
 	                }});
-	cmd_buf.copyImageToBuffer(
-	        chroma,
-	        vk::ImageLayout::eTransferSrcOptimal,
-	        *yuv_buffer,
-	        vk::BufferImageCopy{
-	                .bufferOffset = width * height,
-	                .bufferRowLength = uint32_t(width / 2),
-	                .imageSubresource = {
-	                        .aspectMask = vk::ImageAspectFlagBits::eColor,
-	                        .layerCount = 1,
-	                },
-	                .imageOffset = {
-	                        .x = rect.offset.x / 2,
-	                        .y = rect.offset.y / 2,
-	                },
-	                .imageExtent = {
-	                        .width = rect.extent.width / 2,
-	                        .height = rect.extent.height / 2,
-	                        .depth = 1,
-	                }});
-	return;
+	if (chroma)
+	{
+		cmd_buf.copyImageToBuffer(
+		        chroma,
+		        vk::ImageLayout::eTransferSrcOptimal,
+		        *yuv_buffer,
+		        vk::BufferImageCopy{
+		                .bufferOffset = width * height,
+		                .bufferRowLength = uint32_t(width / 2),
+		                .imageSubresource = {
+		                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+		                        .layerCount = 1,
+		                },
+		                .imageOffset = {
+		                        .x = rect.offset.x / 2,
+		                        .y = rect.offset.y / 2,
+		                },
+		                .imageExtent = {
+		                        .width = rect.extent.width / 2,
+		                        .height = rect.extent.height / 2,
+		                        .depth = 1,
+		                }});
+	}
+	else if (not chroma_cleared)
+	{
+		cmd_buf.fillBuffer(*yuv_buffer, width * height, vk::WholeSize, 0x8080);
+		chroma_cleared = true;
+	}
 }
 
 void VideoEncoderNvenc::Encode(bool idr, std::chrono::steady_clock::time_point pts)

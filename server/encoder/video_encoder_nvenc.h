@@ -56,6 +56,7 @@ private:
 
 	vk::Image luma;
 	vk::Image chroma;
+	bool chroma_cleared = false;
 	CUdeviceptr frame;
 	uint32_t width;
 	uint32_t height;
