@@ -147,7 +147,7 @@ XrCompositionLayerQuad scenes::stream::plot_performance_metrics(XrTime predicted
 	        // clang-format on
 	};
 
-	int n_plots = plots.size() + decoders.size();
+	int n_plots = plots.size() + decoder_metrics.size();
 	axis_scale.resize(n_plots);
 
 	int n_cols = 2;
