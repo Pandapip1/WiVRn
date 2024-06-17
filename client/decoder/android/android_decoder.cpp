@@ -447,58 +447,56 @@ void decoder::create_sampler(const AHardwareBuffer_Desc & buffer_desc, vk::Andro
 	else
 		yuv_filter = vk::Filter::eNearest;
 
-	// Create VkSampler
-	vk::SamplerCreateInfo sampler_info{
-	        .magFilter = yuv_filter,
-	        .minFilter = yuv_filter,
-	        .mipmapMode = vk::SamplerMipmapMode::eNearest,
-	        .addressModeU = vk::SamplerAddressMode::eClampToEdge,
-	        .addressModeV = vk::SamplerAddressMode::eClampToEdge,
-	        .addressModeW = vk::SamplerAddressMode::eClampToEdge,
-	        .mipLodBias = 0.0f,
-	        .anisotropyEnable = VK_FALSE,
-	        .maxAnisotropy = 1,
-	        .compareEnable = VK_FALSE,
-	        .compareOp = vk::CompareOp::eNever,
-	        .minLod = 0.0f,
-	        .maxLod = 0.0f,
-	        .borderColor = vk::BorderColor::eFloatOpaqueWhite, // TODO TBC
-	        .unnormalizedCoordinates = VK_FALSE,
+	// Create VkSamplerYcbcrConversion
+	vk::StructureChain ycbcr_create_info{
+	        vk::SamplerYcbcrConversionCreateInfo{
+	                .format = vk::Format::eUndefined,
+	                .ycbcrModel = ahb_format.suggestedYcbcrModel,
+	                .ycbcrRange = ahb_format.suggestedYcbcrRange,
+	                .components = ahb_format.samplerYcbcrConversionComponents,
+	                .xChromaOffset = ahb_format.suggestedXChromaOffset,
+	                .yChromaOffset = ahb_format.suggestedYChromaOffset,
+	                .chromaFilter = yuv_filter,
+	        },
+	        vk::ExternalFormatANDROID{
+	                .externalFormat = ahb_format.externalFormat,
+	        },
 	};
 
-	vk::SamplerYcbcrConversionInfo sampler_ycbcr_info{};
+	// suggested values from decoder don't actually read the metadata, so it's garbage
+	if (description.range)
+		ycbcr_create_info.get<vk::SamplerYcbcrConversionCreateInfo>().ycbcrRange = vk::SamplerYcbcrRange(*description.range);
 
-	if (stream_index < 128)
-	{
-		// Create VkSamplerYcbcrConversion
-		vk::StructureChain ycbcr_create_info{
-		        vk::SamplerYcbcrConversionCreateInfo{
-		                .format = vk::Format::eUndefined,
-		                .ycbcrModel = ahb_format.suggestedYcbcrModel,
-		                .ycbcrRange = ahb_format.suggestedYcbcrRange,
-		                .components = ahb_format.samplerYcbcrConversionComponents,
-		                .xChromaOffset = ahb_format.suggestedXChromaOffset,
-		                .yChromaOffset = ahb_format.suggestedYChromaOffset,
-		                .chromaFilter = yuv_filter,
-		        },
-		        vk::ExternalFormatANDROID{
-		                .externalFormat = ahb_format.externalFormat,
-		        },
-		};
+	if (description.color_model)
+		ycbcr_create_info.get<vk::SamplerYcbcrConversionCreateInfo>().ycbcrModel = vk::SamplerYcbcrModelConversion(*description.color_model);
 
-		// suggested values from decoder don't actually read the metadata, so it's garbage
-		if (description.range)
-			ycbcr_create_info.get<vk::SamplerYcbcrConversionCreateInfo>().ycbcrRange = vk::SamplerYcbcrRange(*description.range);
+	ycbcr_conversion = vk::raii::SamplerYcbcrConversion(device, ycbcr_create_info.get<vk::SamplerYcbcrConversionCreateInfo>());
 
-		if (description.color_model)
-			ycbcr_create_info.get<vk::SamplerYcbcrConversionCreateInfo>().ycbcrModel = vk::SamplerYcbcrModelConversion(*description.color_model);
+	// Create VkSampler
+	vk::StructureChain sampler_info{
+	        vk::SamplerCreateInfo{
+	                .magFilter = yuv_filter,
+	                .minFilter = yuv_filter,
+	                .mipmapMode = vk::SamplerMipmapMode::eNearest,
+	                .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+	                .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+	                .addressModeW = vk::SamplerAddressMode::eClampToEdge,
+	                .mipLodBias = 0.0f,
+	                .anisotropyEnable = VK_FALSE,
+	                .maxAnisotropy = 1,
+	                .compareEnable = VK_FALSE,
+	                .compareOp = vk::CompareOp::eNever,
+	                .minLod = 0.0f,
+	                .maxLod = 0.0f,
+	                .borderColor = vk::BorderColor::eFloatOpaqueWhite, // TODO TBC
+	                .unnormalizedCoordinates = VK_FALSE,
+	        },
+	        vk::SamplerYcbcrConversionInfo{
+	                .conversion = *ycbcr_conversion,
+	        },
+	};
 
-		ycbcr_conversion = vk::raii::SamplerYcbcrConversion(device, ycbcr_create_info.get<vk::SamplerYcbcrConversionCreateInfo>());
-		sampler_ycbcr_info.conversion = *ycbcr_conversion;
-		sampler_info.pNext = &sampler_ycbcr_info;
-	}
-
-	ycbcr_sampler = vk::raii::Sampler(device, sampler_info);
+	ycbcr_sampler = vk::raii::Sampler(device, sampler_info.get());
 }
 
 std::shared_ptr<decoder::mapped_hardware_buffer> decoder::map_hardware_buffer(AImage * image)
@@ -568,29 +566,26 @@ std::shared_ptr<decoder::mapped_hardware_buffer> decoder::map_hardware_buffer(AI
 
 	vimage.bindMemory(*memory, 0);
 
-	vk::ImageViewCreateInfo iv_info{
-	        .image = *vimage,
-	        .viewType = vk::ImageViewType::e2D,
-	        .format = vk::Format::eUndefined,
-	        .subresourceRange = {
-	                .aspectMask = vk::ImageAspectFlagBits::eColor,
-	                .baseMipLevel = 0,
-	                .levelCount = 1,
-	                .baseArrayLayer = 0,
-	                .layerCount = 1,
+	vk::StructureChain iv_info{
+	        vk::ImageViewCreateInfo{
+	                .image = *vimage,
+	                .viewType = vk::ImageViewType::e2D,
+	                .format = vk::Format::eUndefined,
+	                .subresourceRange = {
+	                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+	                        .baseMipLevel = 0,
+	                        .levelCount = 1,
+	                        .baseArrayLayer = 0,
+	                        .layerCount = 1,
+	                },
+	        },
+	        vk::SamplerYcbcrConversionInfo{
+	                .conversion = *ycbcr_conversion,
 	        },
 	};
-	vk::SamplerYcbcrConversionInfo ycbcr_info{
-	        .conversion = *ycbcr_conversion,
-	};
-
-	if (stream_index < 128)
-		iv_info.pNext = &ycbcr_info;
-	else
-		iv_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::ePlane0KHR;
 
 	application::ignore_debug_reports_for(*vimage);
-	vk::raii::ImageView image_view(device, iv_info);
+	vk::raii::ImageView image_view(device, iv_info.get());
 	application::unignore_debug_reports_for(*vimage);
 
 	auto handle = std::make_shared<mapped_hardware_buffer>();

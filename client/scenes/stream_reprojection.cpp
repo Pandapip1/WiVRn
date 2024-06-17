@@ -392,7 +392,6 @@ void stream_reprojection::reproject(vk::raii::CommandBuffer & command_buffer, in
 		ubo[source]->xc.y = foveation_parameters[source].y.center;
 	}
 
-	vk::ClearValue clear(vk::ClearColorValue(0, 0, 0, 0));
 	vk::RenderPassBeginInfo begin_info{
 	        .renderPass = *renderpass,
 	        .framebuffer = *framebuffers[destination],
@@ -400,8 +399,6 @@ void stream_reprojection::reproject(vk::raii::CommandBuffer & command_buffer, in
 	                .offset = {0, 0},
 	                .extent = extent,
 	        },
-	        .clearValueCount = 1,
-	        .pClearValues = &clear,
 	};
 
 	command_buffer.pipelineBarrier(

@@ -177,7 +177,7 @@ VideoEncoderX264::VideoEncoderX264(
 	pic.img.plane[1] = (uint8_t *)chroma.map();
 	pic.img.i_stride[1] = settings.video_width;
 
-	memset(pic.img.plane[1], 0, settings.video_width * settings.video_height / 2);
+	memset(pic.img.plane[1], 128, settings.video_width * settings.video_height / 2);
 }
 
 void VideoEncoderX264::PresentImage(vk::Image luma, vk::Image chroma, vk::raii::CommandBuffer & cmd_buf)
