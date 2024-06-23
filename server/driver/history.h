@@ -20,7 +20,9 @@
 #pragma once
 
 #include "clock_offset.h"
+#include "os/os_time.h"
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <list>
 #include <mutex>
@@ -31,15 +33,23 @@ class history
 	struct TimedData : public Data
 	{
 		XrTime produced_timestamp;
+		XrTime received;
 		XrTime at_timestamp_ns;
 	};
 
 	std::mutex mutex;
 	std::list<TimedData> data;
 
+	XrTime last_get = 0;
+	// How long data has been waiting before being consumed
+	XrDuration prediction_age = 0;
+	// How much in the future shall data be requested
+	XrDuration prediction_offset = 0;
+
 protected:
 	void add_sample(XrTime produced_timestamp, XrTime timestamp, const Data & sample, const clock_offset & offset)
 	{
+		XrTime received = os_monotonic_get_ns();
 		XrTime produced = offset.from_headset(produced_timestamp);
 		XrTime t = offset.from_headset(timestamp);
 		std::lock_guard lock(mutex);
@@ -59,21 +69,22 @@ protected:
 		// Insert the new sample
 		auto it = std::lower_bound(data.begin(), data.end(), t, [](TimedData & sample, uint64_t t) { return sample.at_timestamp_ns < t; });
 		if (it == data.end())
-			data.emplace_back(sample, produced, t);
+			data.emplace_back(sample, produced, received, t);
 		else if (it->at_timestamp_ns == t)
-			*it = TimedData(sample, produced, t);
+			*it = TimedData(sample, produced, received, t);
 		else
-			data.emplace(it, sample, produced, t);
+			data.emplace(it, sample, produced, received, t);
 
 		while (data.size() > MaxSamples)
 			data.pop_front();
 	}
 
 public:
-	std::pair<std::chrono::nanoseconds, Data> get_at(XrTime at_timestamp_ns)
+	Data get_at(XrTime at_timestamp_ns)
 	{
 		std::lock_guard lock(mutex);
-		std::chrono::nanoseconds ex(0);
+		XrTime now = os_monotonic_get_ns();
+		last_get = now;
 
 		if (data.empty())
 		{
@@ -89,42 +100,67 @@ public:
 
 		if (data.size() == 1)
 		{
-			return {ex, data.front()};
+			return data.front();
 		}
 
+		// Old data
 		if (data.front().at_timestamp_ns > at_timestamp_ns)
 		{
 			if (extrapolate)
 			{
 				auto second = data.begin();
 				auto first = second++;
-				return {ex, Derived::extrapolate(*first, *second, first->at_timestamp_ns, second->at_timestamp_ns, at_timestamp_ns)};
+				return Derived::extrapolate(*first, *second, first->at_timestamp_ns, second->at_timestamp_ns, at_timestamp_ns);
 			}
 			else
-				return {ex, data.front()};
+				return data.front();
 		}
 
+		// Data between 2 known samples
 		for (auto after = data.begin(), before = after++; after != data.end(); before = after++)
 		{
 			if (after->at_timestamp_ns > at_timestamp_ns)
 			{
-				ex = std::chrono::nanoseconds(at_timestamp_ns - std::min(before->produced_timestamp, after->produced_timestamp));
 				float t = float(after->at_timestamp_ns - at_timestamp_ns) /
 				          (after->at_timestamp_ns - before->at_timestamp_ns);
-				return {ex, Derived::interpolate(*before, *after, t)};
+
+				// This is a prediction, attempt to tune values
+				if (at_timestamp_ns > now)
+				{
+					XrDuration d = at_timestamp_ns - std::max(before->produced_timestamp, after->produced_timestamp);
+					prediction_offset = std::max(prediction_offset, d);
+
+					d = now - std::max(before->received, after->received);
+					prediction_age = std::lerp(prediction_age, d, 0.2);
+				}
+				return Derived::interpolate(*before, *after, t);
 			}
 		}
 
-		ex = std::chrono::nanoseconds(at_timestamp_ns - data.back().produced_timestamp);
+		// Data after the latest sample
+		XrDuration d = at_timestamp_ns - data.back().produced_timestamp;
+		prediction_offset = std::max(prediction_offset, d);
+
+		d = now - data.back().received;
+		prediction_age = std::lerp(prediction_age, d, 0.2);
+
 		if (extrapolate)
 		{
 			auto prev = data.rbegin();
 			auto last = prev++;
-			return {ex, Derived::extrapolate(*prev, *last, prev->at_timestamp_ns, last->at_timestamp_ns, at_timestamp_ns)};
+			return Derived::extrapolate(*prev, *last, prev->at_timestamp_ns, last->at_timestamp_ns, at_timestamp_ns);
 		}
 		else
 		{
-			return {ex, data.back()};
+			return data.back();
 		}
+	}
+
+	std::tuple<XrTime, XrDuration, XrDuration> get_stats()
+	{
+		std::lock_guard lock(mutex);
+		std::tuple<XrTime, XrDuration, XrDuration> res{last_get, prediction_age, prediction_offset};
+		prediction_offset = 0;
+		return res;
 	}
 };

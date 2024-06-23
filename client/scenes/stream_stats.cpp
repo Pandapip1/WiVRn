@@ -290,7 +290,7 @@ XrCompositionLayerQuad scenes::stream::plot_performance_metrics(XrTime predicted
 	}
 
 	ImPlot::PopStyleColor(5);
-	ImGui::Text("%s", fmt::format(_F("Estimated motion to photons latency: {}ms"), tracking_prediction_offset.load() / 1'000'000).c_str());
+	ImGui::Text("%s", fmt::format(_F("Estimated motion to photons latency: {}ms"), motion_to_photon.load() / 1'000'000).c_str());
 	ImGui::End();
 
 	return imgui_ctx->end_frame();

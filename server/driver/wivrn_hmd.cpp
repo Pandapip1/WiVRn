@@ -261,9 +261,7 @@ xrt_space_relation wivrn_hmd::get_tracked_pose(xrt_input_name name, uint64_t at_
 		return {};
 	}
 
-	auto [extrapolation_time, res] = views.get_at(at_timestamp_ns);
-	cnx->add_predict_offset(extrapolation_time);
-	return res.relation;
+	return views.get_at(at_timestamp_ns).relation;
 }
 
 void wivrn_hmd::update_tracking(const from_headset::tracking & tracking, const clock_offset & offset)
@@ -278,8 +276,7 @@ void wivrn_hmd::get_view_poses(const xrt_vec3 * default_eye_relation,
                                xrt_fov * out_fovs,
                                xrt_pose * out_poses)
 {
-	auto [extrapolation_time, view] = views.get_at(at_timestamp_ns);
-	cnx->add_predict_offset(extrapolation_time);
+	auto view = views.get_at(at_timestamp_ns);
 
 	int flags = view.relation.relation_flags;
 
@@ -356,6 +353,11 @@ decltype(wivrn_hmd::foveation_parameters) wivrn_hmd::set_foveated_size(uint32_t 
 	compute_distortion = wivrn_hmd_compute_distortion;
 	u_distortion_mesh_fill_in_compute(this);
 	return foveation_parameters;
+}
+
+std::tuple<XrTime, XrDuration, XrDuration> wivrn_hmd::tracking_stats()
+{
+	return views.get_stats();
 }
 
 /*

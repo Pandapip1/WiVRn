@@ -77,7 +77,8 @@ private:
 	std::thread network_thread;
 	std::mutex local_floor_mutex;
 	xr::space local_floor;
-	std::atomic<std::chrono::nanoseconds::rep> tracking_prediction_offset;
+	std::atomic<std::optional<to_headset::input_pacing_control>> input_pacing_control;
+	std::atomic<XrDuration> motion_to_photon;
 	std::optional<std::thread> tracking_thread;
 
 	std::shared_mutex decoder_mutex;
@@ -133,7 +134,7 @@ public:
 	void operator()(to_headset::video_stream_data_shard &&);
 	void operator()(to_headset::haptics &&);
 	void operator()(to_headset::timesync_query &&);
-	void operator()(to_headset::prediction_offset &&);
+	void operator()(to_headset::input_pacing_control &&);
 	void operator()(to_headset::audio_stream_description &&);
 	void operator()(to_headset::video_stream_description &&);
 	void operator()(audio_data &&);

@@ -133,6 +133,7 @@ struct tracking
 		XrVector3f linear_velocity;
 		XrVector3f angular_velocity;
 		uint8_t flags;
+		XrTime timestamp;
 	};
 
 	struct view
@@ -143,7 +144,6 @@ struct tracking
 	};
 
 	XrTime production_timestamp;
-	XrTime timestamp;
 	XrViewStateFlags flags;
 
 	std::array<view, 2> views;
@@ -331,12 +331,31 @@ struct timesync_query
 	XrTime query;
 };
 
-struct prediction_offset
+struct input_pacing_control
 {
-	std::chrono::nanoseconds offset;
+	enum class target
+	{
+		head,
+		left_grip,
+		left_aim,
+		left_hand,
+		right_grip,
+		right_aim,
+		right_hand,
+	};
+	struct control
+	{
+		// Period for polling
+		XrDuration period;
+		// Phase change to apply
+		XrDuration phase;
+		// How much in the future predictions should be done
+		XrDuration offset;
+	};
+	std::array<control, 7> items; // indexed by target
 };
 
-using packets = std::variant<handshake, audio_stream_description, video_stream_description, audio_data, video_stream_data_shard, haptics, timesync_query, prediction_offset>;
+using packets = std::variant<handshake, audio_stream_description, video_stream_description, audio_data, video_stream_data_shard, haptics, timesync_query, input_pacing_control>;
 
 } // namespace to_headset
 

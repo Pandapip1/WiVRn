@@ -53,7 +53,6 @@ void view_list::update_tracking(const from_headset::tracking & tracking, const c
 			view.fovs[eye] = xrt_cast(tracking.views[eye].fov);
 		}
 
-		add_sample(tracking.production_timestamp, tracking.timestamp, view, offset);
-		return;
+		add_sample(tracking.production_timestamp, pose.timestamp, view, offset);
 	}
 }

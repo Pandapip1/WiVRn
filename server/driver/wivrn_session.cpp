@@ -35,6 +35,7 @@
 
 #include "xrt/xrt_session.h"
 #include <cmath>
+#include <main/comp_compositor.h>
 #include <vulkan/vulkan.h>
 
 struct wivrn_comp_target_factory : public comp_target_factory
@@ -73,18 +74,6 @@ struct wivrn_comp_target_factory : public comp_target_factory
 		return true;
 	}
 };
-
-void xrt::drivers::wivrn::max_accumulator::send(wivrn_connection & connection)
-{
-	if (std::chrono::steady_clock::now() < next_sample)
-		return;
-
-	if (auto offset = max.exchange(0))
-		connection.send_stream(to_headset::prediction_offset{
-		        .offset = std::chrono::nanoseconds(offset),
-		});
-	next_sample += std::chrono::seconds(1);
-}
 
 xrt::drivers::wivrn::wivrn_session::wivrn_session(xrt::drivers::wivrn::TCP && tcp, u_system & system) :
         connection(std::move(tcp)), xrt_system(system)
@@ -275,7 +264,7 @@ void wivrn_session::run(std::weak_ptr<wivrn_session> weak_self)
 			if (self and not self->quit)
 			{
 				self->offset_est.request_sample(self->connection);
-				self->predict_offset.send(self->connection);
+				self->input_pacing();
 				self->connection.poll(*self, 20);
 			}
 			else
@@ -303,6 +292,70 @@ void wivrn_session::dump_time(const std::string & event, uint64_t frame, uint64_
 		std::lock_guard lock(csv_mutex);
 		feedback_csv << std::quoted(event) << "," << frame << "," << time << "," << (int)stream << extra << std::endl;
 	}
+}
+
+void wivrn_session::input_pacing()
+{
+	if (next_input_pacing > std::chrono::steady_clock::now())
+		return;
+	next_input_pacing = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+
+	// Assume frequency is the same as display
+	XrDuration target_period = hmd->hmd->screens[0].nominal_frame_interval_ns;
+
+	to_headset::input_pacing_control packet;
+
+	XrTime idle = os_monotonic_get_ns() - 1'000'000'000;
+
+	using t = to_headset::input_pacing_control::target;
+
+	auto adjust_phase = [](XrDuration age, XrDuration period) {
+		if (age > period)
+			return XrDuration(0);
+		if (age < period / 10)
+			return -period / 100;
+		if (age < period / 5)
+			return XrDuration(0);
+		return age - period / 5;
+	};
+
+	// HMD
+	auto [last_get, age, offset] = hmd->tracking_stats();
+	if (last_get < idle)
+		packet.items[size_t(t::head)] = {
+		        .period = target_period * 10,
+		};
+	else
+		packet.items[size_t(t::head)] = {
+		        .period = target_period,
+		        .phase = adjust_phase(age, target_period),
+		        .offset = offset,
+		};
+
+	// controllers
+	for (auto & [target, device]: std::initializer_list<std::tuple<t, std::unique_ptr<wivrn_controller> &>>{
+	             {t::left_aim, left_hand},
+	             {t::left_grip, left_hand},
+	             {t::left_hand, left_hand},
+	             {t::right_aim, right_hand},
+	             {t::right_grip, right_hand},
+	             {t::right_hand, right_hand},
+	     })
+	{
+		auto [last_get, age, offset] = device->tracking_stats(target);
+		if (last_get < idle)
+			packet.items[size_t(target)] = {
+			        .period = target_period * 10,
+			};
+		else
+			packet.items[size_t(target)] = {
+			        .period = target_period,
+			        .phase = adjust_phase(age, target_period),
+			        .offset = offset,
+			};
+	}
+
+	send_control(packet);
 }
 
 static bool quit_if_no_client(u_system & xrt_system)

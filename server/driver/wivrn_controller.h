@@ -53,7 +53,7 @@ public:
 	void update_inputs();
 
 	xrt_space_relation get_tracked_pose(xrt_input_name name, uint64_t at_timestamp_ns);
-	std::pair<xrt_hand_joint_set, uint64_t> get_hand_tracking(xrt_input_name name, uint64_t desired_timestamp_ns);
+	xrt_hand_joint_set get_hand_tracking(xrt_input_name name, uint64_t desired_timestamp_ns);
 
 	void set_output(xrt_output_name name, const xrt_output_value * value);
 
@@ -61,6 +61,8 @@ public:
 
 	void update_tracking(const from_headset::tracking &, const clock_offset &);
 	void update_hand_tracking(const from_headset::hand_tracking &, const clock_offset &);
+
+	std::tuple<XrTime, XrDuration, XrDuration> tracking_stats(to_headset::input_pacing_control::target);
 
 private:
 	void set_inputs(device_id input_id, float value, uint64_t last_change_time);

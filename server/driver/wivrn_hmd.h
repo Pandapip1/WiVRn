@@ -68,4 +68,6 @@ public:
 	void update_tracking(const from_headset::tracking &, const clock_offset &);
 
 	decltype(foveation_parameters) set_foveated_size(uint32_t width, uint32_t height);
+
+	std::tuple<XrTime, XrDuration, XrDuration> tracking_stats();
 };
