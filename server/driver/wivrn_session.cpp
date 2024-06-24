@@ -302,6 +302,8 @@ void wivrn_session::input_pacing()
 
 	// Assume frequency is the same as display
 	XrDuration target_period = hmd->hmd->screens[0].nominal_frame_interval_ns;
+	if (auto offset = get_offset())
+		target_period *= offset.a;
 
 	to_headset::input_pacing_control packet;
 
