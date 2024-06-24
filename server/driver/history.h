@@ -80,7 +80,7 @@ protected:
 	}
 
 public:
-	Data get_at(XrTime at_timestamp_ns)
+	Data get_at(XrTime at_timestamp_ns, bool save_stats = true)
 	{
 		std::lock_guard lock(mutex);
 		XrTime now = os_monotonic_get_ns();
@@ -125,7 +125,7 @@ public:
 				          (after->at_timestamp_ns - before->at_timestamp_ns);
 
 				// This is a prediction, attempt to tune values
-				if (at_timestamp_ns > now)
+				if (save_stats and at_timestamp_ns > now)
 				{
 					XrDuration d = at_timestamp_ns - std::max(before->produced_timestamp, after->produced_timestamp);
 					prediction_offset = std::max(prediction_offset, d);
@@ -138,11 +138,14 @@ public:
 		}
 
 		// Data after the latest sample
-		XrDuration d = at_timestamp_ns - data.back().produced_timestamp;
-		prediction_offset = std::max(prediction_offset, d);
+		if (save_stats)
+		{
+			XrDuration d = at_timestamp_ns - data.back().produced_timestamp;
+			prediction_offset = std::max(prediction_offset, d);
 
-		d = now - data.back().received;
-		prediction_age = std::lerp(prediction_age, d, 0.2);
+			d = now - data.back().received;
+			prediction_age = std::lerp(prediction_age, d, 0.2);
+		}
 
 		if (extrapolate)
 		{

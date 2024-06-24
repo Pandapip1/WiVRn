@@ -94,6 +94,8 @@ struct encoder_thread_param
 
 static void * comp_wivrn_present_thread(void * void_param);
 
+thread_local bool is_compositor_thread_marker = false;
+
 static void create_encoders(wivrn_comp_target * cn)
 {
 	auto vk = get_vk(cn);
@@ -246,6 +248,7 @@ static bool comp_wivrn_init_post_vulkan(struct comp_target * ct, uint32_t prefer
 
 static bool comp_wivrn_check_ready(struct comp_target * ct)
 {
+	is_compositor_thread_marker = true;
 	struct wivrn_comp_target * cn = (struct wivrn_comp_target *)ct;
 	if (not cn->cnx->connected())
 		return false;
@@ -642,6 +645,11 @@ void wivrn_comp_target::reset_encoders()
 		encoder->SyncNeeded();
 	}
 	cnx->send_control(desc);
+}
+
+bool wivrn_comp_target::is_compositor_thread()
+{
+	return is_compositor_thread_marker;
 }
 
 wivrn_comp_target::wivrn_comp_target(std::shared_ptr<xrt::drivers::wivrn::wivrn_session> cnx, struct comp_compositor * c, float fps) :

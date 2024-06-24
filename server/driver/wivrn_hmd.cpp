@@ -26,6 +26,7 @@
 #include "util/u_distortion_mesh.h"
 #include "util/u_logging.h"
 
+#include "wivrn_comp_target.h"
 #include "xrt_cast.h"
 #include <algorithm>
 #include <cmath>
@@ -261,7 +262,7 @@ xrt_space_relation wivrn_hmd::get_tracked_pose(xrt_input_name name, uint64_t at_
 		return {};
 	}
 
-	return views.get_at(at_timestamp_ns).relation;
+	return views.get_at(at_timestamp_ns, not wivrn_comp_target::is_compositor_thread()).relation;
 }
 
 void wivrn_hmd::update_tracking(const from_headset::tracking & tracking, const clock_offset & offset)
@@ -276,7 +277,7 @@ void wivrn_hmd::get_view_poses(const xrt_vec3 * default_eye_relation,
                                xrt_fov * out_fovs,
                                xrt_pose * out_poses)
 {
-	auto view = views.get_at(at_timestamp_ns);
+	auto view = views.get_at(at_timestamp_ns, not wivrn_comp_target::is_compositor_thread());
 
 	int flags = view.relation.relation_flags;
 

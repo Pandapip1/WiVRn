@@ -114,6 +114,8 @@ struct wivrn_comp_target : public comp_target
 
 	void on_feedback(const from_headset::feedback &, const clock_offset &);
 	void reset_encoders();
+
+	static bool is_compositor_thread();
 };
 
 } // namespace xrt::drivers::wivrn
